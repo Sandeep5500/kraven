@@ -1,0 +1,18 @@
+# Secrets
+.env
+
+# State & logs
+state/
+*.log
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.python-version
+
+# OS
+.DS_Store
