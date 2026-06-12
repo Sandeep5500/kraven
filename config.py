@@ -196,6 +196,23 @@ US_STATE_ABBRS = [
     "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI",
     "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY", "DC",
 ]
+# Major US cities/tech hubs that feeds often list WITHOUT a state (e.g. just
+# "San Francisco"). Checked after explicit non-US markers so "Cambridge, UK" or
+# "San Jose, Costa Rica" still resolve non-US.
+US_CITIES = [
+    "san francisco", "south san francisco", "new york", "new york city", "nyc",
+    "seattle", "palo alto", "mountain view", "menlo park", "san jose",
+    "santa clara", "sunnyvale", "cupertino", "redwood city", "san mateo",
+    "bellevue", "redmond", "los angeles", "san diego", "santa monica",
+    "culver city", "el segundo", "pasadena", "irvine", "long beach", "oakland",
+    "berkeley", "fremont", "emeryville", "boston", "cambridge", "somerville",
+    "austin", "dallas", "plano", "houston", "chicago", "denver", "boulder",
+    "atlanta", "washington dc", "arlington", "reston", "pittsburgh",
+    "philadelphia", "miami", "portland", "salt lake city", "phoenix", "tempe",
+    "san antonio", "minneapolis", "detroit", "ann arbor", "nashville",
+    "raleigh", "durham", "charlotte", "columbus", "kansas city", "las vegas",
+    "brooklyn", "bentonville", "remote, united states", "remote us",
+]
 # Clear non-US markers (countries/cities). If present without any US signal -> drop.
 NON_US_MARKERS = [
     "canada", "united kingdom", "australia", "germany", "france", "india",
@@ -213,6 +230,7 @@ NON_US_MARKERS = [
     "madrid", "lisbon", "stockholm", "copenhagen", "helsinki", "oslo", "milan",
     "remote - emea", "remote - apac", "remote - uk", "remote-emea",
     "remote, canada", "remote - canada", "emea", "apac", "latam",
+    "costa rica", "colombia", "peru", "uruguay", "new zealand",
 ]
 
 # --- Slack -------------------------------------------------------------------

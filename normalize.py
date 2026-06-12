@@ -236,6 +236,7 @@ def is_us_location(location: str, country: str = "") -> bool:
         return True
 
     t = " " + re.sub(r"[^a-z0-9]+", " ", loc.lower()).strip() + " "
+    # Strong US signals.
     if any(term in t for term in config.US_LOCATION_TERMS):
         return True
     if re.search(r"\bus\b", t):
@@ -243,11 +244,16 @@ def is_us_location(location: str, country: str = "") -> bool:
     if any(f" {s} " in t for s in config.US_STATES_FULL):
         return True
 
-    # Explicit non-US signals.
+    # Explicit non-US signals (checked before the city allowlist so that e.g.
+    # "Cambridge, UK" / "San Jose, Costa Rica" resolve non-US).
     if any(m in t for m in config.NON_US_MARKERS):
         return False
     if re.search(r"\buk\b", t):
         return False
+
+    # Major US cities listed without a state (e.g. "San Francisco").
+    if any(f" {c} " in t for c in config.US_CITIES):
+        return True
 
     # Ambiguous (no US, no known non-US): "Remote", "Hybrid", etc.
     if "remote" in t:
