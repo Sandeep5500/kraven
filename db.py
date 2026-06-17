@@ -162,6 +162,34 @@ def save_enrichment(key: str, data: dict) -> None:
         )
 
 
+# --- notifications -----------------------------------------------------------
+def get_unnotified(min_impact: int = 0, limit: int | None = None) -> list[dict]:
+    """Active, not-yet-notified roles. If min_impact>0, only enriched roles whose
+    impact meets the threshold (so we wait for enrichment before alerting)."""
+    init_db()
+    q = "SELECT * FROM roles WHERE notified=0 AND status='active'"
+    params: list = []
+    if min_impact and min_impact > 0:
+        q += " AND enriched=1 AND impact >= ?"
+        params.append(int(min_impact))
+    q += " ORDER BY impact DESC NULLS LAST, first_seen DESC"
+    if limit:
+        q += f" LIMIT {int(limit)}"
+    with connect() as conn:
+        rows = [dict(r) for r in conn.execute(q, params).fetchall()]
+    for r in rows:
+        r["skills"] = json.loads(r.get("skills") or "[]")
+        r["tags"] = json.loads(r.get("tags") or "[]")
+    return rows
+
+
+def mark_notified(keys: list[str]) -> None:
+    if not keys:
+        return
+    with connect() as conn:
+        conn.executemany("UPDATE roles SET notified=1 WHERE key=?", [(k,) for k in keys])
+
+
 # --- query helpers (used by the API) -----------------------------------------
 def query_roles(*, status="active", company=None, category=None, source=None,
                 seniority=None, min_impact=None, has_comp=False, search=None,

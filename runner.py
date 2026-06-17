@@ -155,10 +155,19 @@ def main() -> None:
         help="pre-create every category channel + a thread root per company "
              "(no role replies), then exit",
     )
+    parser.add_argument(
+        "--notify", action="store_true",
+        help="post a Slack digest of new (high-impact, enriched) roles with UI "
+             "links, mark them notified, then exit (no polling)",
+    )
     args = parser.parse_args()
 
     load_dotenv(config.ROOT / ".env")
     setup_logging()
+
+    if args.notify:
+        slack.notify_new(dry_run=args.dry_run)
+        sys.exit(0)
 
     # Single-instance lock so a manual run and the cron (or two crons) can't race
     # on the seen-store / Slack threads. Advisory flock auto-releases on exit.
@@ -234,25 +243,27 @@ def main() -> None:
         log.info("Initialized. Seeded %d roles; posted init message.", len(current_keys))
         return
 
-    # --- Normal run: compute and post the delta.
+    # --- Notify mode: the DB is the browse surface + alert source. Slack alerts
+    # are sent separately (run with --notify, after enrichment). Nothing to post
+    # here beyond the DB upsert done above.
+    if config.SLACK_NOTIFY_MODE != "threads":
+        log.info("Run complete: companies=%d errors=%d roles=%d (notify mode; "
+                 "run --notify to alert)%s", polled, errors, len(current_keys),
+                 " (dry-run)" if args.dry_run else "")
+        return
+
+    # --- Legacy threads mode: compute and post the delta to per-company threads.
     seen = dedupe.load_seen()
     new_keys = current_keys - seen
     new_records = [by_key[k] for k in new_keys]
-    # Newest first when posted_at is available.
     new_records.sort(key=lambda r: r.get("posted_at") or "", reverse=True)
-
-    # Cap per company (newest first) so no single thread floods. Capped-out roles
-    # are still marked seen below, so they won't trickle in on later runs.
     to_post = _cap_per_company(new_records)
     log.info("%d new roles vs %d seen; posting %d after per-company cap of %d",
              len(new_records), len(seen), len(to_post),
              config.MAX_ROLES_PER_COMPANY_PER_RUN)
-
     posted = slack.post_new_roles(to_post, company_category, dry_run=args.dry_run)
-
     if not args.dry_run:
         dedupe.save_seen(seen | new_keys, updated_at=now)
-
     log.info(
         "Run complete: companies=%d errors=%d roles_seen=%d new=%d posted=%d%s",
         polled, errors, len(current_keys), len(new_records), posted,

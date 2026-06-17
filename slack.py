@@ -361,6 +361,57 @@ def init_structure(company_category: dict[str, str], *, dry_run: bool = False) -
     return (len(channels), len(threads))
 
 
+def notify_new(*, dry_run: bool = False) -> int:
+    """DB-driven digest: post not-yet-notified (high-impact, once enriched) roles
+    to the home channel with links into the UI, then mark them notified.
+    Returns count notified."""
+    import db
+    roles = db.get_unnotified(min_impact=config.SLACK_NOTIFY_MIN_IMPACT,
+                              limit=config.SLACK_NOTIFY_MAX)
+    if not roles:
+        log.info("notify: nothing new to alert")
+        return 0
+    home = _home_channel()
+    base = config.BASE_URL
+
+    blocks = [{"type": "section", "text": {"type": "mrkdwn",
+              "text": f":sparkles: *{len(roles)} new AI role(s)*"
+                      + (f" — <{base}|browse all in Kraven>" if base else "")}},
+              {"type": "divider"}]
+    for r in roles:
+        comp = ""
+        if r.get("comp_max"):
+            comp = f" · ${r['comp_max']//1000}k"
+        imp = f" · impact {r['impact']}" if r.get("impact") else ""
+        ov = f"\n{r['overview']}" if r.get("overview") else ""
+        url = r.get("url") or base
+        line = (f"*<{url}|{r['role_title']}>* — {r['company']}\n"
+                f"{r.get('location','')}{comp}{imp}{ov}")
+        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": line[:2900]}})
+
+    if threaded_enabled():
+        if not home:
+            log.warning("notify: SLACK_HOME_CHANNEL not set; cannot post digest")
+            return 0
+        if not dry_run:
+            try:
+                _api("chat.postMessage", {"channel": home, "text": f"{len(roles)} new AI roles",
+                                          "blocks": blocks[:50]})
+            except SlackError as exc:
+                log.warning("notify post failed: %s", exc)
+                return 0
+        else:
+            print(json.dumps({"channel": home, "blocks": blocks[:50]}, indent=2)[:1500])
+    else:
+        _post_webhook({"text": f"{len(roles)} new AI roles", "blocks": blocks[:50]},
+                      dry_run=dry_run)
+
+    if not dry_run:
+        db.mark_notified([r["key"] for r in roles])
+    log.info("notify: alerted %d roles", len(roles))
+    return len(roles)
+
+
 def check_config() -> bool:
     """Verify Slack setup without posting. Returns True if good to go."""
     if not threaded_enabled():

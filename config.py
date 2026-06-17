@@ -4,16 +4,22 @@ Everything tunable lives here so the runner/pollers stay generic.
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 # --- Paths -------------------------------------------------------------------
 ROOT = Path(__file__).resolve().parent
 WATCHLIST_RAW = ROOT / "ai_companies_watchlist.csv"
 WATCHLIST_RESOLVED = ROOT / "watchlist_resolved.csv"
-STATE_DIR = ROOT / "state"
+# STATE_DIR is overridable so deployment can put state on a Modal Volume
+# (KRAVEN_STATE_DIR=/data). Everything mutable lives under it.
+STATE_DIR = Path(os.environ.get("KRAVEN_STATE_DIR", str(ROOT / "state")))
 SEEN_STORE = STATE_DIR / "seen.json"
 DB_PATH = STATE_DIR / "roles.db"      # SQLite store of all roles + enrichment
-LOG_FILE = ROOT / "run.log"
+LOG_FILE = Path(os.environ.get("KRAVEN_LOG_FILE", str(ROOT / "run.log")))
+
+# Public base URL of the deployed UI (used in Slack notification links).
+BASE_URL = os.environ.get("KRAVEN_BASE_URL", "").rstrip("/")
 
 # --- HTTP --------------------------------------------------------------------
 USER_AGENT = (
@@ -251,13 +257,18 @@ SLACK_MIN_INTERVAL = 1.0     # seconds between Slack requests (>=1 req/sec rule)
 SLACK_RETRIES = 3
 SLACK_BACKOFF = 2.0
 
-# Posting mode:
-#   - If SLACK_BOT_TOKEN (xoxb-...) is set AND SLACK_THREADED is True, the runner
-#     posts each company's roles as replies under a per-company thread, grouped
-#     into category channels (hybrid layout). Requires a Slack app with scopes:
-#     chat:write, channels:manage, channels:read (+ channels:join for existing
-#     public channels the bot must post to).
-#   - Otherwise it falls back to the flat incoming-webhook (SLACK_WEBHOOK_URL).
+# How the runner uses Slack for NEW roles:
+#   "notify"  -> post a compact digest to SLACK_HOME_CHANNEL with links into the
+#                UI (the app is now the browse surface; Slack is just alerts).
+#   "threads" -> legacy: one thread per company in category channels.
+SLACK_NOTIFY_MODE = "notify"
+# In notify mode, only alert on roles with impact >= this (once enriched). Set 0
+# to alert on all new roles regardless of enrichment.
+SLACK_NOTIFY_MIN_IMPACT = 4
+SLACK_NOTIFY_MAX = 15            # cap roles per notification digest
+
+# Posting mode (threads): if SLACK_BOT_TOKEN is set AND SLACK_THREADED is True,
+# roles post as per-company thread replies in category channels; else flat webhook.
 SLACK_THREADED = True
 
 # Optional "home" channel id (Cxxxxx) for the init/summary message in threaded
