@@ -40,6 +40,8 @@ def normalize_greenhouse(company: str, job: dict) -> dict:
         "posted_at": job.get("updated_at"),
         "source_platform": "greenhouse",
         "job_id": str(job.get("id")),
+        "country": "",
+        "description": job.get("content") or "",   # HTML-escaped JD
     }
 
 
@@ -59,6 +61,8 @@ def normalize_lever(company: str, job: dict) -> dict:
         "posted_at": posted_at,
         "source_platform": "lever",
         "job_id": str(job.get("id")),
+        "country": "",
+        "description": job.get("descriptionPlain") or job.get("description") or "",
     }
 
 
@@ -79,6 +83,9 @@ def normalize_amazon(company: str, job: dict) -> dict:
         "source_platform": "amazon",
         "job_id": str(job.get("id_icims") or job.get("id")),
         "country": (job.get("country_code") or "").strip(),
+        "description": " ".join(filter(None, [
+            job.get("description_short"), job.get("basic_qualifications"),
+            job.get("preferred_qualifications")])) or job.get("description") or "",
     }
 
 
@@ -96,6 +103,7 @@ def normalize_workable(company: str, job: dict) -> dict:
         "source_platform": "workable",
         "job_id": str(job.get("shortcode") or job.get("code")),
         "country": (job.get("country") or "").strip(),
+        "description": job.get("description") or "",
     }
 
 
@@ -114,6 +122,8 @@ def normalize_workday(company: str, job: dict, *, tenant: str, dc: str, site: st
         "posted_at": None,
         "source_platform": "workday",
         "job_id": path or str(job.get("bulletFields")),
+        "country": "",
+        "description": "",   # Workday list API has no JD; needs a detail call (v2)
     }
 
 
@@ -137,6 +147,8 @@ def normalize_smartrecruiters(company: str, job: dict) -> dict:
         "posted_at": job.get("releasedDate"),
         "source_platform": "smartrecruiters",
         "job_id": job_id,
+        "country": (loc.get("country") or "").upper() if isinstance(loc, dict) else "",
+        "description": "",   # SR list API has no JD; needs a detail call (v2)
     }
 
 
@@ -150,6 +162,8 @@ def normalize_ashby(company: str, job: dict) -> dict:
         "posted_at": job.get("publishedAt") or job.get("updatedAt"),
         "source_platform": "ashby",
         "job_id": str(job.get("id")),
+        "country": "",
+        "description": job.get("descriptionPlain") or "",
     }
 
 

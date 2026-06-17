@@ -1,0 +1,226 @@
+"""SQLite store for roles + LLM enrichment.
+
+One row per de-dupe key (company:source_platform:job_id). The runner upserts the
+current matched roles each run; roles no longer seen are marked closed (so the UI
+can archive them). Enrichment fields are filled in later by enrich.py.
+
+This is the source of truth for the web UI; it does not replace seen.json/Slack
+yet (kept additive during the migration).
+"""
+from __future__ import annotations
+
+import json
+import sqlite3
+from contextlib import contextmanager
+
+import config
+
+# Columns that come straight from a normalized record. `category` is the ATS
+# department/team (per role); `company_category` is the watchlist bucket
+# (Frontier, Infra, ...) used for the UI's category filter.
+_RECORD_COLS = ["company", "company_category", "role_title", "location", "url",
+                "category", "posted_at", "source_platform", "job_id", "country",
+                "description"]
+
+_SCHEMA = """
+CREATE TABLE IF NOT EXISTS roles (
+    key             TEXT PRIMARY KEY,
+    company         TEXT,
+    company_category TEXT,
+    role_title      TEXT,
+    location        TEXT,
+    url             TEXT,
+    category        TEXT,
+    posted_at       TEXT,
+    source_platform TEXT,
+    job_id          TEXT,
+    country         TEXT,
+    description     TEXT,
+    -- lifecycle
+    first_seen      TEXT,
+    last_seen       TEXT,
+    status          TEXT DEFAULT 'active',   -- active | closed
+    notified        INTEGER DEFAULT 0,       -- posted to Slack yet
+    -- enrichment (filled by enrich.py)
+    enriched        INTEGER DEFAULT 0,
+    overview        TEXT,
+    comp_min        INTEGER,
+    comp_max        INTEGER,
+    comp_currency   TEXT,
+    comp_raw        TEXT,
+    yoe_min         INTEGER,
+    seniority       TEXT,
+    remote          TEXT,
+    impact          INTEGER,                 -- 1-5 notability score
+    skills          TEXT,                    -- JSON array
+    tags            TEXT                     -- JSON array
+);
+CREATE INDEX IF NOT EXISTS idx_roles_status   ON roles(status);
+CREATE INDEX IF NOT EXISTS idx_roles_company  ON roles(company);
+CREATE INDEX IF NOT EXISTS idx_roles_category ON roles(category);
+CREATE INDEX IF NOT EXISTS idx_roles_enriched ON roles(enriched);
+"""
+
+
+@contextmanager
+def connect():
+    config.STATE_DIR.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(config.DB_PATH)
+    conn.row_factory = sqlite3.Row
+    try:
+        yield conn
+        conn.commit()
+    finally:
+        conn.close()
+
+
+# Columns added after the initial schema, for self-migration of existing DBs.
+_MIGRATIONS = {"company_category": "TEXT"}
+
+
+def init_db() -> None:
+    with connect() as conn:
+        conn.executescript(_SCHEMA)
+        existing = {r[1] for r in conn.execute("PRAGMA table_info(roles)").fetchall()}
+        for col, typ in _MIGRATIONS.items():
+            if col not in existing:
+                conn.execute(f"ALTER TABLE roles ADD COLUMN {col} {typ}")
+
+
+def upsert_roles(records: list[dict], *, now: str) -> list[str]:
+    """Insert/refresh the given roles. Returns the keys that are NEW (first seen
+    this run). Existing rows have last_seen + status='active' refreshed and any
+    changed core fields updated; enrichment is preserved.
+    """
+    from normalize import dedupe_key
+
+    init_db()
+    new_keys: list[str] = []
+    with connect() as conn:
+        existing = {r[0] for r in conn.execute("SELECT key FROM roles").fetchall()}
+        for rec in records:
+            key = dedupe_key(rec)
+            vals = {c: rec.get(c) for c in _RECORD_COLS}
+            if key in existing:
+                conn.execute(
+                    f"""UPDATE roles SET {', '.join(f'{c}=:{c}' for c in _RECORD_COLS)},
+                        last_seen=:now, status='active' WHERE key=:key""",
+                    {**vals, "now": now, "key": key},
+                )
+            else:
+                new_keys.append(key)
+                conn.execute(
+                    f"""INSERT INTO roles (key, {', '.join(_RECORD_COLS)},
+                                           first_seen, last_seen, status)
+                        VALUES (:key, {', '.join(f':{c}' for c in _RECORD_COLS)},
+                                :now, :now, 'active')""",
+                    {**vals, "key": key, "now": now},
+                )
+    return new_keys
+
+
+def mark_closed(active_keys: set[str], *, now: str) -> int:
+    """Mark any currently-active role not in active_keys as closed. Returns count."""
+    init_db()
+    with connect() as conn:
+        rows = conn.execute("SELECT key FROM roles WHERE status='active'").fetchall()
+        to_close = [(r[0],) for r in rows if r[0] not in active_keys]
+        conn.executemany("UPDATE roles SET status='closed', last_seen=? WHERE key=?",
+                         [(now, k[0]) for k in to_close])
+    return len(to_close)
+
+
+# --- enrichment helpers ------------------------------------------------------
+def get_unenriched(limit: int | None = None) -> list[dict]:
+    init_db()
+    q = "SELECT * FROM roles WHERE enriched=0 AND status='active' ORDER BY first_seen DESC"
+    if limit:
+        q += f" LIMIT {int(limit)}"
+    with connect() as conn:
+        return [dict(r) for r in conn.execute(q).fetchall()]
+
+
+def save_enrichment(key: str, data: dict) -> None:
+    fields = {
+        "overview": data.get("overview"),
+        "comp_min": data.get("comp_min"),
+        "comp_max": data.get("comp_max"),
+        "comp_currency": data.get("comp_currency"),
+        "comp_raw": data.get("comp_raw"),
+        "yoe_min": data.get("yoe_min"),
+        "seniority": data.get("seniority"),
+        "remote": data.get("remote"),
+        "impact": data.get("impact"),
+        "skills": json.dumps(data.get("skills") or []),
+        "tags": json.dumps(data.get("tags") or []),
+    }
+    with connect() as conn:
+        conn.execute(
+            f"UPDATE roles SET {', '.join(f'{k}=:{k}' for k in fields)}, enriched=1 "
+            f"WHERE key=:key",
+            {**fields, "key": key},
+        )
+
+
+# --- query helpers (used by the API) -----------------------------------------
+def query_roles(*, status="active", company=None, category=None, source=None,
+                seniority=None, min_impact=None, has_comp=False, search=None,
+                sort="first_seen", order="desc", limit=200, offset=0) -> list[dict]:
+    init_db()
+    where = ["status = ?"]
+    params: list = [status]
+    if company:
+        where.append("company = ?"); params.append(company)
+    if category:
+        where.append("company_category = ?"); params.append(category)
+    if source:
+        where.append("source_platform = ?"); params.append(source)
+    if seniority:
+        where.append("seniority = ?"); params.append(seniority)
+    if min_impact:
+        where.append("impact >= ?"); params.append(int(min_impact))
+    if has_comp:
+        where.append("comp_max IS NOT NULL")
+    if search:
+        where.append("(role_title LIKE ? OR company LIKE ? OR overview LIKE ?)")
+        params += [f"%{search}%"] * 3
+    allowed_sort = {"first_seen", "comp_max", "impact", "company", "role_title"}
+    sort = sort if sort in allowed_sort else "first_seen"
+    order = "DESC" if str(order).lower() != "asc" else "ASC"
+    q = (f"SELECT * FROM roles WHERE {' AND '.join(where)} "
+         f"ORDER BY {sort} {order} NULLS LAST LIMIT ? OFFSET ?")
+    params += [int(limit), int(offset)]
+    with connect() as conn:
+        rows = [dict(r) for r in conn.execute(q, params).fetchall()]
+    for r in rows:
+        r["skills"] = json.loads(r.get("skills") or "[]")
+        r["tags"] = json.loads(r.get("tags") or "[]")
+    return rows
+
+
+def facets() -> dict:
+    init_db()
+    with connect() as conn:
+        def distinct(col):
+            return [r[0] for r in conn.execute(
+                f"SELECT DISTINCT {col} FROM roles WHERE status='active' AND {col} != '' "
+                f"ORDER BY {col}").fetchall() if r[0]]
+        counts = dict(conn.execute(
+            "SELECT status, COUNT(*) FROM roles GROUP BY status").fetchall())
+        return {
+            "companies": distinct("company"),
+            "categories": distinct("company_category"),
+            "departments": distinct("category"),
+            "sources": distinct("source_platform"),
+            "counts": counts,
+        }
+
+
+def stats() -> dict:
+    init_db()
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) total, "
+            "SUM(status='active') active, "
+            "SUM(enriched=1) enriched FROM roles").fetchone()
+        return {"total": row[0], "active": row[1] or 0, "enriched": row[2] or 0}

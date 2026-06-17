@@ -12,6 +12,7 @@ WATCHLIST_RAW = ROOT / "ai_companies_watchlist.csv"
 WATCHLIST_RESOLVED = ROOT / "watchlist_resolved.csv"
 STATE_DIR = ROOT / "state"
 SEEN_STORE = STATE_DIR / "seen.json"
+DB_PATH = STATE_DIR / "roles.db"      # SQLite store of all roles + enrichment
 LOG_FILE = ROOT / "run.log"
 
 # --- HTTP --------------------------------------------------------------------
@@ -232,6 +233,17 @@ NON_US_MARKERS = [
     "remote, canada", "remote - canada", "emea", "apac", "latam",
     "costa rica", "colombia", "peru", "uruguay", "new zealand",
 ]
+
+# --- LLM enrichment (OpenAI-compatible endpoint, e.g. a Modal-hosted model) --
+# Credentials/endpoint come from env so the model can be swapped without code:
+#   OPENAI_BASE_URL  e.g. https://<your>.modal.run/v1
+#   OPENAI_API_KEY   token for that endpoint (any string if the server ignores it)
+#   ENRICH_MODEL     model name the endpoint expects
+ENRICH_MODEL_DEFAULT = "default"
+ENRICH_MAX_DESC_CHARS = 6000     # truncate JD before sending
+ENRICH_CONCURRENCY = 4
+ENRICH_TIMEOUT = 60.0
+ENRICH_MAX_TOKENS = 600
 
 # --- Slack -------------------------------------------------------------------
 SLACK_BATCH_SIZE = 10        # roles per Block Kit message (flat/webhook mode)

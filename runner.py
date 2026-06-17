@@ -25,6 +25,7 @@ from datetime import datetime, timezone
 from dotenv import load_dotenv
 
 import config
+import db
 import dedupe
 import slack
 from normalize import dedupe_key, is_us_location, title_matches
@@ -196,6 +197,16 @@ def main() -> None:
              polled, errors, len(matching), len(current_keys))
 
     now = datetime.now(timezone.utc).isoformat()
+
+    # --- Persist to the SQLite store (source of truth for the web UI). Additive;
+    # does not affect the Slack/seen.json path. Skipped on dry-run.
+    if not args.dry_run:
+        for rec in by_key.values():
+            rec["company_category"] = company_category.get(rec["company"], "")
+        new_in_db = db.upsert_roles(list(by_key.values()), now=now)
+        closed = db.mark_closed(current_keys, now=now)
+        log.info("DB: %d roles upserted (%d new), %d marked closed",
+                 len(by_key), len(new_in_db), closed)
 
     # --- Reseed: rebaseline the store to the current open roles, post nothing.
     if args.reseed:

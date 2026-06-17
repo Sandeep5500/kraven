@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Kraven — AI Jobs</title>
+<style>
+  :root { --bg:#0f1115; --panel:#171a21; --line:#262b36; --txt:#e6e8ec; --mut:#9aa3b2; --acc:#6ea8fe; --good:#3fb950; --warn:#d29922; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt); font:14px/1.45 -apple-system,Segoe UI,Roboto,sans-serif; }
+  header { padding:14px 20px; border-bottom:1px solid var(--line); display:flex; gap:16px; align-items:center; flex-wrap:wrap; }
+  h1 { font-size:18px; margin:0; }
+  .stats { color:var(--mut); font-size:12px; }
+  .controls { display:flex; gap:8px; flex-wrap:wrap; padding:12px 20px; border-bottom:1px solid var(--line); align-items:center; }
+  select, input, button { background:var(--panel); color:var(--txt); border:1px solid var(--line); border-radius:6px; padding:6px 9px; font-size:13px; }
+  input[type=text] { min-width:220px; }
+  label.chk { color:var(--mut); display:flex; gap:5px; align-items:center; }
+  .wrap { padding:0 12px; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; padding:9px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { position:sticky; top:0; background:var(--bg); color:var(--mut); font-weight:600; cursor:pointer; white-space:nowrap; font-size:12px; }
+  th.sorted::after { content:" ↓"; } th.asc.sorted::after { content:" ↑"; }
+  tr:hover td { background:#12151c; }
+  .title { font-weight:600; }
+  .title a { color:var(--txt); text-decoration:none; }
+  .title a:hover { color:var(--acc); }
+  .ov { color:var(--mut); font-size:12px; margin-top:3px; max-width:520px; }
+  .co { color:var(--acc); }
+  .tag { display:inline-block; background:#1d2230; color:var(--mut); border:1px solid var(--line); border-radius:10px; padding:1px 8px; margin:1px 3px 1px 0; font-size:11px; }
+  .comp { color:var(--good); font-weight:600; white-space:nowrap; }
+  .imp { font-weight:700; }
+  .imp5 { color:#ff7b72; } .imp4 { color:var(--warn); } .imp3 { color:var(--txt); } .imp2,.imp1 { color:var(--mut); }
+  .apply { color:var(--acc); text-decoration:none; }
+  .muted { color:var(--mut); }
+  .pill { font-size:11px; border:1px solid var(--line); border-radius:6px; padding:1px 6px; color:var(--mut); }
+  #empty { padding:40px; text-align:center; color:var(--mut); }
+</style>
+</head>
+<body>
+<header>
+  <h1>🦅 Kraven — AI Jobs</h1>
+  <span class="stats" id="stats"></span>
+</header>
+<div class="controls">
+  <input type="text" id="search" placeholder="Search title / company / overview…"/>
+  <select id="company"><option value="">All companies</option></select>
+  <select id="category"><option value="">All categories</option></select>
+  <select id="seniority">
+    <option value="">Any seniority</option>
+    <option>new-grad</option><option>mid</option><option>senior</option>
+    <option>staff</option><option>principal</option><option>intern</option>
+  </select>
+  <select id="min_impact">
+    <option value="">Any impact</option>
+    <option value="5">Impact 5</option><option value="4">Impact ≥4</option><option value="3">Impact ≥3</option>
+  </select>
+  <label class="chk"><input type="checkbox" id="has_comp"/> Has comp</label>
+  <label class="chk"><input type="checkbox" id="closed"/> Show closed</label>
+  <button id="reset">Reset</button>
+</div>
+<div class="wrap">
+  <table>
+    <thead><tr>
+      <th data-sort="role_title">Role</th>
+      <th data-sort="company">Company</th>
+      <th>Location</th>
+      <th data-sort="comp_max">Comp</th>
+      <th>Seniority</th>
+      <th data-sort="impact" class="sorted">Impact</th>
+      <th>Tags</th>
+      <th data-sort="first_seen">Seen</th>
+      <th></th>
+    </tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <div id="empty" style="display:none">No roles match these filters.</div>
+</div>
+<script>
+const $ = s => document.querySelector(s);
+let sort = "impact", order = "desc";
+
+async function loadFacets() {
+  const f = await (await fetch("/api/facets")).json();
+  for (const c of f.companies) $("#company").append(new Option(c, c));
+  for (const c of f.categories) $("#category").append(new Option(c, c));
+}
+function fmtComp(r){
+  if (r.comp_max) { const k=v=>"$"+Math.round(v/1000)+"k";
+    return r.comp_min && r.comp_min!=r.comp_max ? k(r.comp_min)+"–"+k(r.comp_max) : k(r.comp_max); }
+  return r.comp_raw ? `<span class="muted">${r.comp_raw}</span>` : "";
+}
+function ago(iso){ if(!iso) return ""; const d=(Date.now()-new Date(iso))/86400000;
+  return d<1?"today":d<2?"1d":Math.floor(d)+"d"; }
+function esc(s){ return (s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+async function load() {
+  const p = new URLSearchParams();
+  p.set("status", $("#closed").checked ? "closed" : "active");
+  for (const id of ["search","company","category","seniority","min_impact"]) {
+    const v = $("#"+id).value; if (v) p.set(id, v);
+  }
+  if ($("#has_comp").checked) p.set("has_comp","true");
+  p.set("sort", sort); p.set("order", order); p.set("limit","1000");
+  const data = await (await fetch("/api/roles?"+p)).json();
+  const tb = $("#rows"); tb.innerHTML = "";
+  $("#empty").style.display = data.roles.length ? "none" : "block";
+  for (const r of data.roles) {
+    const tr = document.createElement("tr");
+    const imp = r.impact ? `<span class="imp imp${r.impact}">${r.impact}</span>` : "";
+    const tags = (r.tags||[]).slice(0,4).map(t=>`<span class="tag">${esc(t)}</span>`).join("");
+    tr.innerHTML = `
+      <td class="title"><a href="${esc(r.url)}" target="_blank">${esc(r.role_title)}</a>
+          ${r.overview?`<div class="ov">${esc(r.overview)}</div>`:""}</td>
+      <td class="co">${esc(r.company)}</td>
+      <td class="muted">${esc(r.location)}</td>
+      <td class="comp">${fmtComp(r)}</td>
+      <td><span class="pill">${esc(r.seniority||"")}</span></td>
+      <td>${imp}</td>
+      <td>${tags}</td>
+      <td class="muted">${ago(r.first_seen)}</td>
+      <td><a class="apply" href="${esc(r.url)}" target="_blank">Apply ↗</a></td>`;
+    tb.append(tr);
+  }
+  const s = await (await fetch("/api/stats")).json();
+  $("#stats").textContent = `${data.count} shown · ${s.active} active · ${s.enriched} enriched · ${s.total} total`;
+}
+
+document.querySelectorAll("th[data-sort]").forEach(th=>th.onclick=()=>{
+  const col=th.dataset.sort;
+  if (sort===col) order = order==="desc"?"asc":"desc"; else { sort=col; order="desc"; }
+  document.querySelectorAll("th").forEach(h=>h.classList.remove("sorted","asc"));
+  th.classList.add("sorted"); if(order==="asc") th.classList.add("asc");
+  load();
+});
+["search","company","category","seniority","min_impact","has_comp","closed"].forEach(id=>{
+  const el=$("#"+id); el.addEventListener(el.type==="checkbox"||el.tagName==="SELECT"?"change":"input", load);
+});
+$("#reset").onclick=()=>{ document.querySelectorAll("input,select").forEach(e=>{
+  if(e.type==="checkbox") e.checked=false; else e.value=""; }); sort="impact"; order="desc"; load(); };
+
+loadFacets().then(load);
+</script>
+</body>
+</html>
