@@ -91,7 +91,9 @@ def enrich_once():
               min_containers=0, scaledown_window=300)
 @modal.asgi_app()
 def web():
-    os.environ.update(_ENV)
+    import sys
+    sys.path.insert(0, "/root/app")   # repo code lives here (add_local_dir)
+    os.environ.update(_ENV)           # set KRAVEN_STATE_DIR before importing config/api
     from api import app as fastapi_app
 
     @fastapi_app.middleware("http")
