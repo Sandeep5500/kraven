@@ -53,6 +53,8 @@ CREATE TABLE IF NOT EXISTS roles (
     remote          TEXT,
     phd_required    INTEGER,                 -- 1 if a PhD is a hard requirement
     impact          INTEGER,                 -- 1-5 notability score
+    relevance       INTEGER,                 -- 0-100 fit vs the user's resume
+    relevance_reason TEXT,
     skills          TEXT,                    -- JSON array
     tags            TEXT                     -- JSON array
 );
@@ -89,7 +91,8 @@ def connect():
 
 
 # Columns added after the initial schema, for self-migration of existing DBs.
-_MIGRATIONS = {"company_category": "TEXT", "phd_required": "INTEGER"}
+_MIGRATIONS = {"company_category": "TEXT", "phd_required": "INTEGER",
+               "relevance": "INTEGER", "relevance_reason": "TEXT"}
 
 
 def init_db() -> None:
@@ -177,6 +180,30 @@ def save_enrichment(key: str, data: dict) -> None:
         )
 
 
+# --- relevance scoring (resume-dependent) ------------------------------------
+def get_unscored(limit: int | None = None) -> list[dict]:
+    init_db()
+    q = "SELECT * FROM roles WHERE relevance IS NULL AND status='active' ORDER BY first_seen DESC"
+    if limit:
+        q += f" LIMIT {int(limit)}"
+    with connect() as conn:
+        return [dict(r) for r in conn.execute(q).fetchall()]
+
+
+def save_score(key: str, relevance: int | None, reason: str | None) -> None:
+    with connect() as conn:
+        conn.execute("UPDATE roles SET relevance=?, relevance_reason=? WHERE key=?",
+                     (relevance, reason, key))
+
+
+def mark_all_unscored() -> int:
+    """Clear relevance for all roles (e.g. after the resume changes)."""
+    init_db()
+    with connect() as conn:
+        cur = conn.execute("UPDATE roles SET relevance=NULL, relevance_reason=NULL")
+        return cur.rowcount
+
+
 # --- notifications -----------------------------------------------------------
 def get_unnotified(min_impact: int = 0, limit: int | None = None) -> list[dict]:
     """Active, not-yet-notified roles. If min_impact>0, only enriched roles whose
@@ -207,8 +234,8 @@ def mark_notified(keys: list[str]) -> None:
 
 # --- query helpers (used by the API) -----------------------------------------
 def query_roles(*, status="active", company=None, category=None, source=None,
-                seniority=None, min_impact=None, max_yoe=None, yoe_known=False,
-                hide_phd=False, has_comp=False, search=None,
+                seniority=None, min_impact=None, min_relevance=None, max_yoe=None,
+                yoe_known=False, hide_phd=False, has_comp=False, search=None,
                 sort="first_seen", order="desc", limit=200, offset=0) -> list[dict]:
     init_db()
     where = ["status = ?"]
@@ -223,6 +250,8 @@ def query_roles(*, status="active", company=None, category=None, source=None,
         where.append("seniority = ?"); params.append(seniority)
     if min_impact:
         where.append("impact >= ?"); params.append(int(min_impact))
+    if min_relevance:
+        where.append("relevance >= ?"); params.append(int(min_relevance))
     if max_yoe is not None:
         # Include roles at/under the cap; unknown YOE included unless yoe_known.
         if yoe_known:
@@ -230,16 +259,15 @@ def query_roles(*, status="active", company=None, category=None, source=None,
         else:
             where.append("(yoe_min IS NULL OR yoe_min <= ?)"); params.append(int(max_yoe))
     if hide_phd:
-        # Hide any role whose JD mentions a PhD/doctorate (incl. "PhD or
-        # equivalent") — reliable text match, independent of enrichment.
-        for kw in ("%phd%", "%ph.d%", "%ph. d%", "%doctoral%", "%doctorate%"):
-            where.append("LOWER(COALESCE(description,'')) NOT LIKE ?"); params.append(kw)
+        # Hide only HARD PhD requirements (LLM flag); "PhD or equivalent" stays.
+        where.append("(phd_required IS NULL OR phd_required = 0)")
     if has_comp:
         where.append("comp_max IS NOT NULL")
     if search:
         where.append("(role_title LIKE ? OR company LIKE ? OR overview LIKE ?)")
         params += [f"%{search}%"] * 3
-    allowed_sort = {"first_seen", "comp_max", "impact", "company", "role_title", "yoe_min"}
+    allowed_sort = {"first_seen", "comp_max", "impact", "company", "role_title",
+                    "yoe_min", "relevance"}
     sort = sort if sort in allowed_sort else "first_seen"
     order = "DESC" if str(order).lower() != "asc" else "ASC"
     q = (f"SELECT * FROM roles WHERE {' AND '.join(where)} "

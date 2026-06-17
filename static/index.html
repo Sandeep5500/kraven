@@ -30,6 +30,11 @@
   .tag { display:inline-block; background:#1d2230; color:var(--mut); border:1px solid var(--line); border-radius:10px; padding:1px 8px; margin:1px 3px 1px 0; font-size:11px; }
   .comp { color:var(--good); font-weight:600; white-space:nowrap; }
   .yoe { font-weight:700; } .yoe-ok { color:var(--good); } .yoe-high { color:#ff7b72; }
+  .fit { font-weight:700; }
+  td.actions { display:flex; flex-direction:column; gap:6px; }
+  td.actions a { display:inline-block; }
+  .kit { color:#d29922; text-decoration:none; }
+  .kit:hover { color:#ffd36e; }
   .imp { font-weight:700; }
   .imp5 { color:#ff7b72; } .imp4 { color:var(--warn); } .imp3 { color:var(--txt); } .imp2,.imp1 { color:var(--mut); }
   .apply { color:var(--acc); text-decoration:none; }
@@ -66,7 +71,15 @@
     <option value="4">≤ 4 yrs</option>
   </select>
   <label class="chk"><input type="checkbox" id="yoe_known"/> Stated YOE only</label>
-  <label class="chk" title="Hide any role whose JD mentions a PhD/doctorate (incl. 'PhD or equivalent')"><input type="checkbox" id="hide_phd" checked/> Hide PhD roles</label>
+  <label class="chk" title="Hide roles that hard-require a PhD ('PhD or equivalent' stays)"><input type="checkbox" id="hide_phd" checked/> Hide PhD-required</label>
+  <select id="min_relevance" title="Minimum resume-fit score (0-100)">
+    <option value="">Any fit</option>
+    <option value="40">Fit ≥ 40</option>
+    <option value="50">Fit ≥ 50</option>
+    <option value="60">Fit ≥ 60</option>
+    <option value="70">Fit ≥ 70</option>
+    <option value="80">Fit ≥ 80</option>
+  </select>
   <select id="min_impact">
     <option value="">Any impact</option>
     <option value="5">Impact 5</option><option value="4">Impact ≥4</option><option value="3">Impact ≥3</option>
@@ -88,8 +101,8 @@
       <th>Location</th>
       <th data-sort="comp_max">Comp</th>
       <th data-sort="yoe_min" title="Min years of experience required">YOE</th>
-      <th>Seniority</th>
-      <th data-sort="impact" class="sorted">Impact</th>
+      <th data-sort="relevance" class="sorted" title="Fit vs your resume (0-100)">Fit</th>
+      <th data-sort="impact">Impact</th>
       <th>Tags</th>
       <th data-sort="first_seen">Seen</th>
       <th></th>
@@ -100,7 +113,7 @@
 </div>
 <script>
 const $ = s => document.querySelector(s);
-let sort = "impact", order = "desc";
+let sort = "relevance", order = "desc";
 
 async function loadFacets() {
   const f = await (await fetch("/api/facets")).json();
@@ -119,7 +132,7 @@ function esc(s){ return (s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">
 async function load() {
   const p = new URLSearchParams();
   p.set("status", $("#closed").checked ? "closed" : "active");
-  for (const id of ["search","company","category","seniority","min_impact","max_yoe"]) {
+  for (const id of ["search","company","category","seniority","min_impact","min_relevance","max_yoe"]) {
     const v = $("#"+id).value; if (v) p.set(id, v);
   }
   if ($("#has_comp").checked) p.set("has_comp","true");
@@ -135,7 +148,10 @@ async function load() {
     const tags = (r.tags||[]).slice(0,4).map(t=>`<span class="tag">${esc(t)}</span>`).join("");
     const yoe = r.yoe_min==null ? '<span class="muted">—</span>'
       : `<span class="yoe ${r.yoe_min<=4?'yoe-ok':'yoe-high'}">${r.yoe_min}</span>`;
-    const phd = r.phd_mentioned ? ` <span class="tag" style="color:#ff7b72;border-color:#5a2a2a">PhD</span>` : "";
+    const fit = r.relevance==null ? '<span class="muted">—</span>'
+      : `<span class="fit" title="${esc(r.relevance_reason||'')}" style="color:${r.relevance>=70?'#3fb950':r.relevance>=40?'#d29922':'#9aa3b2'}">${r.relevance}</span>`;
+    const phd = r.phd_required ? ` <span class="tag" style="color:#ff7b72;border-color:#5a2a2a" title="PhD required">PhD</span>`
+              : (r.phd_mentioned ? ` <span class="tag" title="PhD or equivalent experience">phd?</span>` : "");
     tr.innerHTML = `
       <td class="title"><a href="${esc(r.url)}" target="_blank">${esc(r.role_title)}</a>${phd}
           ${r.overview?`<div class="ov">${esc(r.overview)}</div>`:""}</td>
@@ -143,12 +159,12 @@ async function load() {
       <td class="muted">${esc(r.location)}</td>
       <td class="comp">${fmtComp(r)}</td>
       <td>${yoe}</td>
-      <td><span class="pill">${esc(r.seniority||"")}</span></td>
+      <td>${fit}</td>
       <td>${imp}</td>
       <td>${tags}</td>
       <td class="muted">${ago(r.first_seen)}</td>
-      <td><a class="apply" href="${esc(r.url)}" target="_blank">Apply ↗</a>
-          <a class="apply" href="/apply?key=${encodeURIComponent(r.key)}" target="_blank" title="Generate outreach + essays">✍️ Kit</a></td>`;
+      <td class="actions"><a class="apply" href="${esc(r.url)}" target="_blank">Apply ↗</a>
+          <a class="kit" href="/apply?key=${encodeURIComponent(r.key)}" target="_blank" title="Generate outreach + essays">✍️ Kit</a></td>`;
     tb.append(tr);
   }
   const s = await (await fetch("/api/stats")).json();
@@ -162,13 +178,13 @@ document.querySelectorAll("th[data-sort]").forEach(th=>th.onclick=()=>{
   th.classList.add("sorted"); if(order==="asc") th.classList.add("asc");
   load();
 });
-["search","company","category","seniority","min_impact","max_yoe","has_comp","yoe_known","hide_phd","closed"].forEach(id=>{
+["search","company","category","seniority","min_impact","min_relevance","max_yoe","has_comp","yoe_known","hide_phd","closed"].forEach(id=>{
   const el=$("#"+id); el.addEventListener(el.type==="checkbox"||el.tagName==="SELECT"?"change":"input", load);
 });
 $("#reset").onclick=()=>{ document.querySelectorAll("input,select").forEach(e=>{
   if(e.type==="checkbox") e.checked=false; else e.value=""; });
   $("#max_yoe").value="3"; $("#hide_phd").checked=true;   // restore defaults: <=3 YOE, no PhD
-  sort="impact"; order="desc"; load(); };
+  sort="relevance"; order="desc"; load(); };
 
 // --- resume upload ---
 async function resumeStatus(){

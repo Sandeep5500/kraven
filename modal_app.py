@@ -55,6 +55,7 @@ def _cycle(*, notify: bool = True) -> None:
         subprocess.run(["python", "enrich.py"], check=True)        # LLM enrich
     except subprocess.CalledProcessError as exc:
         print(f"enrich step skipped/failed (endpoint not ready?): {exc}")
+    subprocess.run(["python", "score.py"], check=False)            # fit vs resume
     if notify:
         subprocess.run(["python", "runner.py", "--notify"], check=False)
     volume.commit()

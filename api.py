@@ -63,6 +63,7 @@ def api_roles(
     source: str | None = None,
     seniority: str | None = None,
     min_impact: int | None = None,
+    min_relevance: int | None = None,
     max_yoe: int | None = None,
     yoe_known: bool = False,
     hide_phd: bool = False,
@@ -75,8 +76,8 @@ def api_roles(
 ):
     rows = db.query_roles(
         status=status, company=company, category=category, source=source,
-        seniority=seniority, min_impact=min_impact, max_yoe=max_yoe,
-        yoe_known=yoe_known, hide_phd=hide_phd, has_comp=has_comp,
+        seniority=seniority, min_impact=min_impact, min_relevance=min_relevance,
+        max_yoe=max_yoe, yoe_known=yoe_known, hide_phd=hide_phd, has_comp=has_comp,
         search=search, sort=sort, order=order, limit=limit, offset=offset,
     )
     return {"count": len(rows), "roles": rows}
@@ -110,7 +111,8 @@ async def resume_upload(_=Depends(_auth), file: UploadFile = File(...)):
     if len(text) < 50:
         raise HTTPException(400, "Could not extract text from that file (try a text-based PDF or paste).")
     db.save_resume(text, file.filename or "resume", now=_now())
-    return {"ok": True, "filename": file.filename, "chars": len(text)}
+    cleared = db.mark_all_unscored()   # resume changed -> fit scores are stale
+    return {"ok": True, "filename": file.filename, "chars": len(text), "rescore_pending": cleared}
 
 
 @app.post("/api/role/{key}/applykit")
