@@ -83,7 +83,11 @@ def enrich_once():
 
 
 @app.function(image=image, volumes={STATE: volume},
-              secrets=[app_secret], min_containers=1)
+              secrets=[app_secret],
+              # scale-to-zero: only billed when someone opens the UI (a few-second
+              # cold start on the first hit after idle). Set min_containers=1 to
+              # keep it always-warm if the cold start annoys the team.
+              min_containers=0, scaledown_window=300)
 @modal.asgi_app()
 def web():
     os.environ.update(_ENV)
