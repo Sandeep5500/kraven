@@ -60,6 +60,19 @@ CREATE INDEX IF NOT EXISTS idx_roles_status   ON roles(status);
 CREATE INDEX IF NOT EXISTS idx_roles_company  ON roles(company);
 CREATE INDEX IF NOT EXISTS idx_roles_category ON roles(category);
 CREATE INDEX IF NOT EXISTS idx_roles_enriched ON roles(enriched);
+
+CREATE TABLE IF NOT EXISTS profile (
+    id          INTEGER PRIMARY KEY CHECK (id = 1),
+    resume_text TEXT,
+    filename    TEXT,
+    updated_at  TEXT
+);
+
+CREATE TABLE IF NOT EXISTS applykit (
+    key        TEXT PRIMARY KEY,   -- role key
+    data       TEXT,               -- JSON {linkedin, email, referral, answers}
+    created_at TEXT
+);
 """
 
 
@@ -253,6 +266,52 @@ def facets() -> dict:
             "sources": distinct("source_platform"),
             "counts": counts,
         }
+
+
+# --- profile (resume) + apply-kit -------------------------------------------
+def save_resume(text: str, filename: str, *, now: str) -> None:
+    init_db()
+    with connect() as conn:
+        conn.execute(
+            "INSERT INTO profile (id, resume_text, filename, updated_at) VALUES (1,?,?,?) "
+            "ON CONFLICT(id) DO UPDATE SET resume_text=excluded.resume_text, "
+            "filename=excluded.filename, updated_at=excluded.updated_at",
+            (text, filename, now))
+
+
+def get_resume() -> dict | None:
+    init_db()
+    with connect() as conn:
+        r = conn.execute("SELECT resume_text, filename, updated_at FROM profile WHERE id=1").fetchone()
+        return dict(r) if r else None
+
+
+def get_role(key: str) -> dict | None:
+    init_db()
+    with connect() as conn:
+        r = conn.execute("SELECT * FROM roles WHERE key=?", (key,)).fetchone()
+        if not r:
+            return None
+        d = dict(r)
+        d["skills"] = json.loads(d.get("skills") or "[]")
+        d["tags"] = json.loads(d.get("tags") or "[]")
+        return d
+
+
+def get_applykit(key: str) -> dict | None:
+    init_db()
+    with connect() as conn:
+        r = conn.execute("SELECT data FROM applykit WHERE key=?", (key,)).fetchone()
+        return json.loads(r[0]) if r else None
+
+
+def save_applykit(key: str, data: dict, *, now: str) -> None:
+    init_db()
+    with connect() as conn:
+        conn.execute(
+            "INSERT INTO applykit (key, data, created_at) VALUES (?,?,?) "
+            "ON CONFLICT(key) DO UPDATE SET data=excluded.data, created_at=excluded.created_at",
+            (key, json.dumps(data), now))
 
 
 def stats() -> dict:

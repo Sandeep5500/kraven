@@ -114,7 +114,8 @@ def _coerce(data: dict) -> dict:
     return out
 
 
-def call_model(messages: list[dict]) -> dict | None:
+def call_model(messages: list[dict], *, max_tokens: int | None = None,
+               temperature: float = 0.1) -> dict | None:
     base = os.environ.get("OPENAI_BASE_URL", "").rstrip("/")
     key = os.environ.get("OPENAI_API_KEY", "")
     model = os.environ.get("ENRICH_MODEL", config.ENRICH_MODEL_DEFAULT)
@@ -123,8 +124,8 @@ def call_model(messages: list[dict]) -> dict | None:
     payload = {
         "model": model,
         "messages": messages,
-        "temperature": 0.1,
-        "max_tokens": config.ENRICH_MAX_TOKENS,
+        "temperature": temperature,
+        "max_tokens": max_tokens or config.ENRICH_MAX_TOKENS,
     }
     headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     resp = httpx.post(f"{base}/chat/completions", json=payload, headers=headers,

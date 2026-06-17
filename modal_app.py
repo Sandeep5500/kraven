@@ -31,7 +31,7 @@ app = modal.App("kraven")
 image = (
     modal.Image.debian_slim()
     .pip_install("httpx>=0.27", "python-dotenv>=1.0", "fastapi>=0.110",
-                 "uvicorn[standard]>=0.29")
+                 "uvicorn[standard]>=0.29", "pypdf>=4.0", "python-multipart>=0.0.9")
     .add_local_dir(".", remote_path="/root/app",
                    ignore=[".venv", "state", "*.log", ".git", "__pycache__"])
 )
