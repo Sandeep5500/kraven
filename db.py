@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS roles (
     yoe_min         INTEGER,
     seniority       TEXT,
     remote          TEXT,
+    phd_required    INTEGER,                 -- 1 if a PhD is a hard requirement
     impact          INTEGER,                 -- 1-5 notability score
     skills          TEXT,                    -- JSON array
     tags            TEXT                     -- JSON array
@@ -75,7 +76,7 @@ def connect():
 
 
 # Columns added after the initial schema, for self-migration of existing DBs.
-_MIGRATIONS = {"company_category": "TEXT"}
+_MIGRATIONS = {"company_category": "TEXT", "phd_required": "INTEGER"}
 
 
 def init_db() -> None:
@@ -150,6 +151,7 @@ def save_enrichment(key: str, data: dict) -> None:
         "yoe_min": data.get("yoe_min"),
         "seniority": data.get("seniority"),
         "remote": data.get("remote"),
+        "phd_required": data.get("phd_required"),
         "impact": data.get("impact"),
         "skills": json.dumps(data.get("skills") or []),
         "tags": json.dumps(data.get("tags") or []),
@@ -193,7 +195,7 @@ def mark_notified(keys: list[str]) -> None:
 # --- query helpers (used by the API) -----------------------------------------
 def query_roles(*, status="active", company=None, category=None, source=None,
                 seniority=None, min_impact=None, max_yoe=None, yoe_known=False,
-                has_comp=False, search=None,
+                hide_phd=False, has_comp=False, search=None,
                 sort="first_seen", order="desc", limit=200, offset=0) -> list[dict]:
     init_db()
     where = ["status = ?"]
@@ -214,6 +216,8 @@ def query_roles(*, status="active", company=None, category=None, source=None,
             where.append("yoe_min <= ?"); params.append(int(max_yoe))
         else:
             where.append("(yoe_min IS NULL OR yoe_min <= ?)"); params.append(int(max_yoe))
+    if hide_phd:
+        where.append("(phd_required IS NULL OR phd_required = 0)")
     if has_comp:
         where.append("comp_max IS NOT NULL")
     if search:

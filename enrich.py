@@ -47,6 +47,9 @@ SCHEMA_HINT = """Return JSON with exactly these keys:
   "yoe_min": <minimum years of experience as int, or null>,
   "seniority": "<one of: intern, new-grad, mid, senior, staff, principal, unknown>",
   "remote": "<one of: remote, hybrid, onsite, unknown>",
+  "phd_required": <true ONLY if a PhD is a HARD requirement; false if a Master's or
+                   Bachelor's suffices, or if a PhD is merely "preferred" / "nice to
+                   have" / "or equivalent experience">,
   "impact": <integer 1-5 = how high-impact/notable this role is for an AI/ML career>,
   "skills": ["<key required skill>", ...up to 8],
   "tags": ["<short topical tag e.g. LLM, RL, infra, vision>", ...up to 6]
@@ -101,6 +104,7 @@ def _coerce(data: dict) -> dict:
         "yoe_min": as_int(data.get("yoe_min")),
         "seniority": data.get("seniority") or "unknown",
         "remote": data.get("remote") or "unknown",
+        "phd_required": 1 if data.get("phd_required") in (True, "true", "True", 1, "yes") else 0,
         "impact": as_int(data.get("impact")),
         "skills": data.get("skills") if isinstance(data.get("skills"), list) else [],
         "tags": data.get("tags") if isinstance(data.get("tags"), list) else [],

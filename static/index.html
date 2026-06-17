@@ -57,10 +57,11 @@
     <option value="0">New grad (0 yrs)</option>
     <option value="1">≤ 1 yr</option>
     <option value="2">≤ 2 yrs</option>
-    <option value="3">≤ 3 yrs</option>
+    <option value="3" selected>≤ 3 yrs</option>
     <option value="4">≤ 4 yrs</option>
   </select>
   <label class="chk"><input type="checkbox" id="yoe_known"/> Stated YOE only</label>
+  <label class="chk"><input type="checkbox" id="hide_phd" checked/> Hide PhD-required</label>
   <select id="min_impact">
     <option value="">Any impact</option>
     <option value="5">Impact 5</option><option value="4">Impact ≥4</option><option value="3">Impact ≥3</option>
@@ -118,6 +119,7 @@ async function load() {
   }
   if ($("#has_comp").checked) p.set("has_comp","true");
   if ($("#yoe_known").checked) p.set("yoe_known","true");
+  if ($("#hide_phd").checked) p.set("hide_phd","true");
   p.set("sort", sort); p.set("order", order); p.set("limit","1000");
   const data = await (await fetch("/api/roles?"+p)).json();
   const tb = $("#rows"); tb.innerHTML = "";
@@ -128,8 +130,9 @@ async function load() {
     const tags = (r.tags||[]).slice(0,4).map(t=>`<span class="tag">${esc(t)}</span>`).join("");
     const yoe = r.yoe_min==null ? '<span class="muted">—</span>'
       : `<span class="yoe ${r.yoe_min<=4?'yoe-ok':'yoe-high'}">${r.yoe_min}</span>`;
+    const phd = r.phd_required ? ` <span class="tag" style="color:#ff7b72;border-color:#5a2a2a">PhD</span>` : "";
     tr.innerHTML = `
-      <td class="title"><a href="${esc(r.url)}" target="_blank">${esc(r.role_title)}</a>
+      <td class="title"><a href="${esc(r.url)}" target="_blank">${esc(r.role_title)}</a>${phd}
           ${r.overview?`<div class="ov">${esc(r.overview)}</div>`:""}</td>
       <td class="co">${esc(r.company)}</td>
       <td class="muted">${esc(r.location)}</td>
@@ -153,11 +156,13 @@ document.querySelectorAll("th[data-sort]").forEach(th=>th.onclick=()=>{
   th.classList.add("sorted"); if(order==="asc") th.classList.add("asc");
   load();
 });
-["search","company","category","seniority","min_impact","max_yoe","has_comp","yoe_known","closed"].forEach(id=>{
+["search","company","category","seniority","min_impact","max_yoe","has_comp","yoe_known","hide_phd","closed"].forEach(id=>{
   const el=$("#"+id); el.addEventListener(el.type==="checkbox"||el.tagName==="SELECT"?"change":"input", load);
 });
 $("#reset").onclick=()=>{ document.querySelectorAll("input,select").forEach(e=>{
-  if(e.type==="checkbox") e.checked=false; else e.value=""; }); sort="impact"; order="desc"; load(); };
+  if(e.type==="checkbox") e.checked=false; else e.value=""; });
+  $("#max_yoe").value="3"; $("#hide_phd").checked=true;   // restore defaults: <=3 YOE, no PhD
+  sort="impact"; order="desc"; load(); };
 
 loadFacets().then(load);
 </script>
