@@ -16,15 +16,16 @@
   input[type=text] { min-width:220px; }
   label.chk { color:var(--mut); display:flex; gap:5px; align-items:center; }
   .wrap { padding:0 12px; }
-  table { width:100%; border-collapse:collapse; }
-  th, td { text-align:left; padding:9px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  table { width:100%; border-collapse:collapse; table-layout:fixed; }
+  th, td { text-align:left; padding:9px 10px; border-bottom:1px solid var(--line); vertical-align:top; overflow:hidden; word-wrap:break-word; }
   th { position:sticky; top:0; background:var(--bg); color:var(--mut); font-weight:600; cursor:pointer; white-space:nowrap; font-size:12px; }
   th.sorted::after { content:" ↓"; } th.asc.sorted::after { content:" ↑"; }
   tr:hover td { background:#12151c; }
-  .title { font-weight:600; }
+  .title { font-weight:600; line-height:1.3; }
   .title a { color:var(--txt); text-decoration:none; }
   .title a:hover { color:var(--acc); }
-  .ov { color:var(--mut); font-size:12px; margin-top:3px; max-width:520px; }
+  .ov { color:var(--mut); font-size:12px; margin-top:4px;
+        display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
   .co { color:var(--acc); }
   .tag { display:inline-block; background:#1d2230; color:var(--mut); border:1px solid var(--line); border-radius:10px; padding:1px 8px; margin:1px 3px 1px 0; font-size:11px; }
   .comp { color:var(--good); font-weight:600; white-space:nowrap; }
@@ -60,6 +61,11 @@
 </div>
 <div class="wrap">
   <table>
+    <colgroup>
+      <col style="width:30%"><col style="width:9%"><col style="width:13%">
+      <col style="width:10%"><col style="width:9%"><col style="width:6%">
+      <col style="width:14%"><col style="width:4%"><col style="width:5%">
+    </colgroup>
     <thead><tr>
       <th data-sort="role_title">Role</th>
       <th data-sort="company">Company</th>
