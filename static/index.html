@@ -5,11 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>Kraven — AI Jobs</title>
 <style>
-  :root { --bg:#0f1115; --panel:#171a21; --line:#262b36; --txt:#e6e8ec; --mut:#9aa3b2; --acc:#6ea8fe; --good:#3fb950; --warn:#d29922; }
+  :root { --bg:#0f1115; --panel:#171a21; --line:#262b36; --txt:#e6e8ec; --mut:#9aa3b2; --acc:#6ea8fe; --good:#3fb950; --warn:#d29922; --orange:#e0793b; --orange-dim:#7a4a2c; }
   * { box-sizing:border-box; }
   body { margin:0; background:var(--bg); color:var(--txt); font:14px/1.45 -apple-system,Segoe UI,Roboto,sans-serif; }
-  header { padding:14px 20px; border-bottom:1px solid var(--line); display:flex; gap:16px; align-items:center; flex-wrap:wrap; }
-  h1 { font-size:18px; margin:0; }
+  header { padding:13px 20px; display:flex; gap:14px; align-items:center; flex-wrap:wrap;
+           border-bottom:1px solid var(--line);
+           background:linear-gradient(90deg, rgba(224,121,59,0.10), rgba(224,121,59,0) 38%), #12141a;
+           box-shadow:0 1px 0 var(--orange-dim); }
+  .brand { display:flex; align-items:center; gap:10px; }
+  .brand svg { display:block; }
+  h1 { font-size:18px; margin:0; font-weight:700; letter-spacing:0.3px; }
+  h1 .x { color:var(--orange); }
   .stats { color:var(--mut); font-size:12px; }
   .controls { display:flex; gap:8px; flex-wrap:wrap; padding:12px 20px; border-bottom:1px solid var(--line); align-items:center; }
   select, input, button { background:var(--panel); color:var(--txt); border:1px solid var(--line); border-radius:6px; padding:6px 9px; font-size:13px; }
@@ -19,7 +25,7 @@
   table { width:100%; border-collapse:collapse; table-layout:fixed; }
   th, td { text-align:left; padding:9px 10px; border-bottom:1px solid var(--line); vertical-align:top; overflow:hidden; word-wrap:break-word; }
   th { position:sticky; top:0; background:var(--bg); color:var(--mut); font-weight:600; cursor:pointer; white-space:nowrap; font-size:12px; }
-  th.sorted::after { content:" ↓"; } th.asc.sorted::after { content:" ↑"; }
+  th.sorted { color:var(--orange); } th.sorted::after { content:" ↓"; } th.asc.sorted::after { content:" ↑"; }
   tr:hover td { background:#12151c; }
   .title { font-weight:600; line-height:1.3; }
   .title a { color:var(--txt); text-decoration:none; }
@@ -33,8 +39,31 @@
   .fit { font-weight:700; }
   td.actions { display:flex; flex-direction:column; gap:6px; }
   td.actions a { display:inline-block; }
-  .kit { color:#d29922; text-decoration:none; }
-  .kit:hover { color:#ffd36e; }
+  .kit { color:var(--orange); text-decoration:none; cursor:pointer; }
+  .kit:hover { color:#ffa46a; }
+  button:hover { border-color:var(--orange); }
+  /* apply-kit modal */
+  .overlay { position:fixed; inset:0; background:rgba(0,0,0,0.6); display:none; z-index:50;
+             padding:40px 16px; overflow-y:auto; }
+  .overlay.open { display:block; }
+  .modal { max-width:840px; margin:0 auto; background:var(--panel); border:1px solid var(--line);
+           border-top:2px solid var(--orange); border-radius:10px; }
+  .modal .head { display:flex; justify-content:space-between; align-items:center; gap:12px;
+                 padding:14px 16px; border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--panel); }
+  .modal .head .t { font-weight:700; }
+  .modal .head .t small { color:var(--mut); font-weight:400; }
+  .modal .body { padding:8px 16px 20px; }
+  .kcard { background:#12151c; border:1px solid var(--line); border-radius:8px; margin:12px 0; }
+  .kcard h3 { font-size:13px; margin:0; padding:9px 12px; border-bottom:1px solid var(--line);
+              display:flex; justify-content:space-between; align-items:center; color:var(--orange); }
+  .kcard .c { padding:12px; white-space:pre-wrap; font-size:13px; }
+  .essay2 { padding:10px 12px; border-bottom:1px solid var(--line); }
+  .essay2:last-child { border-bottom:none; }
+  .essay2 .q { color:var(--acc); font-weight:600; font-size:12.5px; margin-bottom:4px; }
+  .essay2 .a { white-space:pre-wrap; }
+  .copy { font-size:11px; padding:3px 9px; cursor:pointer; }
+  #kstatus { padding:30px; text-align:center; color:var(--mut); }
+  #kstatus.err { color:#ff7b72; }
   .imp { font-weight:700; }
   .imp5 { color:#ff7b72; } .imp4 { color:var(--warn); } .imp3 { color:var(--txt); } .imp2,.imp1 { color:var(--mut); }
   .apply { color:var(--acc); text-decoration:none; }
@@ -45,7 +74,16 @@
 </head>
 <body>
 <header>
-  <h1>🦅 Kraven — AI Jobs</h1>
+  <div class="brand">
+    <svg width="26" height="26" viewBox="0 0 24 24" aria-label="Kraven">
+      <g fill="none" stroke="var(--orange)" stroke-width="2.3" stroke-linecap="round">
+        <path d="M6.5 3.5 C7.2 9, 7.6 15, 8.2 20.5"/>
+        <path d="M11.8 2.6 C12.4 8.5, 12.7 14.8, 13 21.2"/>
+        <path d="M17 3.6 C17.4 9, 17.4 15, 17 20.4"/>
+      </g>
+    </svg>
+    <h1>KRAVEN<span class="x">.</span></h1>
+  </div>
   <span class="stats" id="stats"></span>
   <span style="margin-left:auto; display:flex; gap:8px; align-items:center;">
     <input type="file" id="resume-file" accept=".pdf,.txt" style="display:none"/>
@@ -111,6 +149,22 @@
   </table>
   <div id="empty" style="display:none">No roles match these filters.</div>
 </div>
+
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <div class="head">
+      <div class="t" id="ktitle">✍️ Apply Kit</div>
+      <div style="display:flex; gap:8px;">
+        <button id="kregen">↻ Regenerate</button>
+        <button id="kclose">← Back to listings</button>
+      </div>
+    </div>
+    <div class="body">
+      <div id="kstatus">Generating from your resume… (first time can take ~20s)</div>
+      <div id="kout"></div>
+    </div>
+  </div>
+</div>
 <script>
 const $ = s => document.querySelector(s);
 let sort = "relevance", order = "desc";
@@ -150,7 +204,7 @@ async function load() {
       : `<span class="yoe ${r.yoe_min<=4?'yoe-ok':'yoe-high'}">${r.yoe_min}</span>`;
     const fit = r.relevance==null ? '<span class="muted">—</span>'
       : `<span class="fit" title="${esc(r.relevance_reason||'')}" style="color:${r.relevance>=70?'#3fb950':r.relevance>=40?'#d29922':'#9aa3b2'}">${r.relevance}</span>`;
-    const phd = r.phd_required ? ` <span class="tag" style="color:#ff7b72;border-color:#5a2a2a" title="PhD required">PhD</span>`
+    const phd = r.phd_required ? ` <span class="tag" style="color:#e3b341;border-color:#5a4a1e" title="PhD required">PhD</span>`
               : (r.phd_mentioned ? ` <span class="tag" title="PhD or equivalent experience">phd?</span>` : "");
     tr.innerHTML = `
       <td class="title"><a href="${esc(r.url)}" target="_blank">${esc(r.role_title)}</a>${phd}
@@ -164,7 +218,7 @@ async function load() {
       <td>${tags}</td>
       <td class="muted">${ago(r.first_seen)}</td>
       <td class="actions"><a class="apply" href="${esc(r.url)}" target="_blank">Apply ↗</a>
-          <a class="kit" href="/apply?key=${encodeURIComponent(r.key)}" target="_blank" title="Generate outreach + essays">✍️ Kit</a></td>`;
+          <a class="kit" data-key="${esc(r.key)}" title="Generate outreach + essays">✍️ Kit</a></td>`;
     tb.append(tr);
   }
   const s = await (await fetch("/api/stats")).json();
@@ -203,6 +257,40 @@ $("#resume-file").onchange=async(e)=>{
   else { try{$("#resume-status").textContent="✗ "+(await r.json()).detail;}catch(_){$("#resume-status").textContent="✗ upload failed";} }
 };
 resumeStatus();
+
+// --- apply-kit modal (in-page) ---
+let kitKey=null;
+function kcard(title,text){
+  const id="k"+Math.random().toString(36).slice(2);
+  return `<div class="kcard"><h3>${title}<button class="copy" data-c="${id}">Copy</button></h3>
+          <div class="c" id="${id}">${esc(text||"")}</div></div>`;
+}
+function closeKit(){ $("#overlay").classList.remove("open"); document.body.style.overflow=""; }
+async function openKit(key){
+  kitKey=key; $("#overlay").classList.add("open"); document.body.style.overflow="hidden";
+  $("#ktitle").textContent="✍️ Apply Kit"; await genKit(false);
+}
+async function genKit(force){
+  const st=$("#kstatus"); $("#kout").innerHTML=""; st.className=""; st.style.display="block";
+  st.textContent="Generating from your resume… (first time can take ~20s)";
+  try{
+    const r=await fetch(`/api/role/${encodeURIComponent(kitKey)}/applykit?force=${force?1:0}`,{method:"POST"});
+    if(!r.ok){ const e=await r.json(); throw new Error(e.detail||"failed"); }
+    const d=await r.json(); const k=d.kit;
+    if(d.role) $("#ktitle").innerHTML=`✍️ ${esc(d.role.role_title)} — <small>${esc(d.role.company)}</small>`;
+    let html=kcard("LinkedIn outreach",k.linkedin_outreach)+kcard("Recruiter email",k.recruiter_email)+kcard("Referral message",k.referral_message);
+    if((k.essays||[]).length){ html+=`<div class="kcard"><h3>Application essay drafts</h3>`+
+      k.essays.map(e=>`<div class="essay2"><div class="q">${esc(e.q)}</div><div class="a">${esc(e.a)}</div></div>`).join("")+`</div>`; }
+    st.style.display="none"; $("#kout").innerHTML=html;
+    document.querySelectorAll("#kout .copy").forEach(b=>b.onclick=()=>{
+      navigator.clipboard.writeText($("#"+b.dataset.c).innerText); b.textContent="Copied!"; setTimeout(()=>b.textContent="Copy",1200); });
+  }catch(e){ st.className="err"; st.innerHTML=esc(e.message)+(/resume/i.test(e.message)?" — upload it with the 📄 button (top-right).":""); }
+}
+$("#kclose").onclick=closeKit;
+$("#kregen").onclick=()=>genKit(true);
+$("#overlay").onclick=(e)=>{ if(e.target.id==="overlay") closeKit(); };
+document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeKit(); });
+$("#rows").addEventListener("click",e=>{ const a=e.target.closest(".kit"); if(a){ e.preventDefault(); openKit(a.dataset.key); } });
 
 loadFacets().then(load);
 </script>
