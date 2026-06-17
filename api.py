@@ -60,6 +60,8 @@ def api_roles(
     source: str | None = None,
     seniority: str | None = None,
     min_impact: int | None = None,
+    max_yoe: int | None = None,
+    yoe_known: bool = False,
     has_comp: bool = False,
     search: str | None = None,
     sort: str = "first_seen",
@@ -69,7 +71,8 @@ def api_roles(
 ):
     rows = db.query_roles(
         status=status, company=company, category=category, source=source,
-        seniority=seniority, min_impact=min_impact, has_comp=has_comp,
+        seniority=seniority, min_impact=min_impact, max_yoe=max_yoe,
+        yoe_known=yoe_known, has_comp=has_comp,
         search=search, sort=sort, order=order, limit=limit, offset=offset,
     )
     return {"count": len(rows), "roles": rows}

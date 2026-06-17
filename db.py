@@ -192,7 +192,8 @@ def mark_notified(keys: list[str]) -> None:
 
 # --- query helpers (used by the API) -----------------------------------------
 def query_roles(*, status="active", company=None, category=None, source=None,
-                seniority=None, min_impact=None, has_comp=False, search=None,
+                seniority=None, min_impact=None, max_yoe=None, yoe_known=False,
+                has_comp=False, search=None,
                 sort="first_seen", order="desc", limit=200, offset=0) -> list[dict]:
     init_db()
     where = ["status = ?"]
@@ -207,12 +208,18 @@ def query_roles(*, status="active", company=None, category=None, source=None,
         where.append("seniority = ?"); params.append(seniority)
     if min_impact:
         where.append("impact >= ?"); params.append(int(min_impact))
+    if max_yoe is not None:
+        # Include roles at/under the cap; unknown YOE included unless yoe_known.
+        if yoe_known:
+            where.append("yoe_min <= ?"); params.append(int(max_yoe))
+        else:
+            where.append("(yoe_min IS NULL OR yoe_min <= ?)"); params.append(int(max_yoe))
     if has_comp:
         where.append("comp_max IS NOT NULL")
     if search:
         where.append("(role_title LIKE ? OR company LIKE ? OR overview LIKE ?)")
         params += [f"%{search}%"] * 3
-    allowed_sort = {"first_seen", "comp_max", "impact", "company", "role_title"}
+    allowed_sort = {"first_seen", "comp_max", "impact", "company", "role_title", "yoe_min"}
     sort = sort if sort in allowed_sort else "first_seen"
     order = "DESC" if str(order).lower() != "asc" else "ASC"
     q = (f"SELECT * FROM roles WHERE {' AND '.join(where)} "
