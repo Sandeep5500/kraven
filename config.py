@@ -248,7 +248,7 @@ NON_US_MARKERS = [
 ENRICH_MODEL_DEFAULT = "default"
 ENRICH_MAX_DESC_CHARS = 6000     # truncate JD before sending
 ENRICH_CONCURRENCY = 4
-ENRICH_TIMEOUT = 60.0
+ENRICH_TIMEOUT = 120.0           # generous: model can be slow / cold-starting
 ENRICH_MAX_TOKENS = 600
 
 # --- Slack -------------------------------------------------------------------
