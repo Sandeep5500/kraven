@@ -230,7 +230,10 @@ def query_roles(*, status="active", company=None, category=None, source=None,
         else:
             where.append("(yoe_min IS NULL OR yoe_min <= ?)"); params.append(int(max_yoe))
     if hide_phd:
-        where.append("(phd_required IS NULL OR phd_required = 0)")
+        # Hide any role whose JD mentions a PhD/doctorate (incl. "PhD or
+        # equivalent") — reliable text match, independent of enrichment.
+        for kw in ("%phd%", "%ph.d%", "%ph. d%", "%doctoral%", "%doctorate%"):
+            where.append("LOWER(COALESCE(description,'')) NOT LIKE ?"); params.append(kw)
     if has_comp:
         where.append("comp_max IS NOT NULL")
     if search:
@@ -245,6 +248,9 @@ def query_roles(*, status="active", company=None, category=None, source=None,
     with connect() as conn:
         rows = [dict(r) for r in conn.execute(q, params).fetchall()]
     for r in rows:
+        desc = (r.pop("description", "") or "").lower()   # drop heavy JD from list payload
+        r["phd_mentioned"] = 1 if any(k in desc for k in
+                                      ("phd", "ph.d", "doctoral", "doctorate")) else 0
         r["skills"] = json.loads(r.get("skills") or "[]")
         r["tags"] = json.loads(r.get("tags") or "[]")
     return rows
