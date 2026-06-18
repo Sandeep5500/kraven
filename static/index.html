@@ -21,6 +21,30 @@
   select, input, button { background:var(--panel); color:var(--txt); border:1px solid var(--line); border-radius:6px; padding:6px 9px; font-size:13px; }
   input[type=text] { min-width:220px; }
   label.chk { color:var(--mut); display:flex; gap:5px; align-items:center; }
+  .controls { position:relative; }
+  .fwrap { position:relative; }
+  #filters-btn { display:flex; gap:7px; align-items:center; }
+  .badge { background:var(--orange); color:#10110f; border-radius:9px; padding:0 6px; font-size:11px; font-weight:700; min-width:16px; text-align:center; }
+  .badge:empty { display:none; }
+  .panel { position:absolute; top:38px; left:0; z-index:40; width:340px; background:var(--panel);
+           border:1px solid var(--line); border-top:2px solid var(--orange); border-radius:10px;
+           padding:14px; display:none; box-shadow:0 10px 30px rgba(0,0,0,.5); }
+  .panel.open { display:block; }
+  .prow { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:9px; }
+  .prow label { color:var(--mut); font-size:12px; }
+  .prow select { min-width:185px; }
+  .ptoggles { display:grid; grid-template-columns:1fr 1fr; gap:7px 12px; margin:12px 0; padding-top:10px; border-top:1px solid var(--line); }
+  .pexcl { padding-top:10px; border-top:1px solid var(--line); }
+  .pexcl > label { color:var(--mut); font-size:12px; display:block; margin-bottom:5px; }
+  .pexcl select { width:100%; }
+  .pfoot { margin-top:12px; }
+  .chips { display:flex; flex-wrap:wrap; gap:5px; }
+  #excl-chips { margin-top:7px; }
+  .chip { background:#1d2230; border:1px solid var(--line); border-radius:12px; padding:2px 6px 2px 9px;
+          font-size:11px; color:var(--txt); display:inline-flex; gap:5px; align-items:center; }
+  .chip b { color:var(--mut); cursor:pointer; font-weight:700; }
+  .chip b:hover { color:#ff7b72; }
+  #active-chips .chip { background:#15212e; }
   .wrap { padding:0 12px; }
   table { width:100%; border-collapse:collapse; table-layout:fixed; }
   th, td { text-align:left; padding:9px 10px; border-bottom:1px solid var(--line); vertical-align:top; overflow:hidden; word-wrap:break-word; }
@@ -85,6 +109,7 @@
     <h1>KRAVEN<span class="x">.</span></h1>
   </div>
   <span class="stats" id="stats"></span>
+  <span class="stats" id="updated" title="When the role data was last refreshed"></span>
   <span style="margin-left:auto; display:flex; gap:10px; align-items:center;">
     <span class="stats" id="whoami"></span>
     <input type="file" id="resume-file" accept=".pdf,.txt" style="display:none"/>
@@ -94,38 +119,49 @@
 </header>
 <div class="controls">
   <input type="text" id="search" placeholder="Search title / company / overview…"/>
-  <select id="company"><option value="">All companies</option></select>
-  <select id="category"><option value="">All categories</option></select>
-  <select id="seniority">
-    <option value="">Any seniority</option>
-    <option>new-grad</option><option>mid</option><option>senior</option>
-    <option>staff</option><option>principal</option><option>intern</option>
-  </select>
-  <select id="max_yoe" title="Maximum years of experience required">
-    <option value="">Any YOE</option>
-    <option value="0">New grad (0 yrs)</option>
-    <option value="1">≤ 1 yr</option>
-    <option value="2">≤ 2 yrs</option>
-    <option value="3" selected>≤ 3 yrs</option>
-    <option value="4">≤ 4 yrs</option>
-  </select>
-  <label class="chk"><input type="checkbox" id="yoe_known"/> Stated YOE only</label>
-  <label class="chk" title="Hide roles that hard-require a PhD ('PhD or equivalent' stays)"><input type="checkbox" id="hide_phd" checked/> Hide PhD-required</label>
-  <select id="min_relevance" title="Minimum resume-fit score (0-100)">
-    <option value="">Any fit</option>
-    <option value="40">Fit ≥ 40</option>
-    <option value="50">Fit ≥ 50</option>
-    <option value="60">Fit ≥ 60</option>
-    <option value="70">Fit ≥ 70</option>
-    <option value="80">Fit ≥ 80</option>
-  </select>
-  <select id="min_impact">
-    <option value="">Any impact</option>
-    <option value="5">Impact 5</option><option value="4">Impact ≥4</option><option value="3">Impact ≥3</option>
-  </select>
-  <label class="chk"><input type="checkbox" id="has_comp"/> Has comp</label>
-  <label class="chk"><input type="checkbox" id="closed"/> Show closed</label>
-  <button id="reset">Reset</button>
+  <div class="fwrap">
+    <button id="filters-btn">⚙ Filters <span id="fcount" class="badge"></span></button>
+    <div id="panel" class="panel">
+      <div class="prow"><label>Company</label>
+        <select id="company"><option value="">All companies</option></select></div>
+      <div class="prow"><label>Category</label>
+        <select id="category"><option value="">All categories</option></select></div>
+      <div class="prow"><label>Max YOE</label>
+        <select id="max_yoe" title="Maximum years of experience required">
+          <option value="">Any YOE</option><option value="0">New grad (0 yrs)</option>
+          <option value="1">≤ 1 yr</option><option value="2">≤ 2 yrs</option>
+          <option value="3" selected>≤ 3 yrs</option><option value="4">≤ 4 yrs</option>
+        </select></div>
+      <div class="prow"><label>Min fit</label>
+        <select id="min_relevance" title="Minimum resume-fit score (0-100)">
+          <option value="">Any fit</option><option value="40">≥ 40</option>
+          <option value="50">≥ 50</option><option value="60">≥ 60</option>
+          <option value="70">≥ 70</option><option value="80">≥ 80</option>
+        </select></div>
+      <div class="prow"><label>Min impact</label>
+        <select id="min_impact"><option value="">Any impact</option>
+          <option value="5">5</option><option value="4">≥ 4</option><option value="3">≥ 3</option>
+        </select></div>
+      <div class="prow"><label>Seniority</label>
+        <select id="seniority"><option value="">Any seniority</option>
+          <option>new-grad</option><option>mid</option><option>senior</option>
+          <option>staff</option><option>principal</option><option>intern</option>
+        </select></div>
+      <div class="ptoggles">
+        <label class="chk" title="Hide roles that hard-require a PhD"><input type="checkbox" id="hide_phd" checked/> Hide PhD-required</label>
+        <label class="chk"><input type="checkbox" id="yoe_known"/> Stated YOE only</label>
+        <label class="chk"><input type="checkbox" id="has_comp"/> Has comp</label>
+        <label class="chk"><input type="checkbox" id="closed"/> Show closed</label>
+      </div>
+      <div class="pexcl">
+        <label>Exclude companies</label>
+        <select id="excl-pick"><option value="">+ add company to hide…</option></select>
+        <div id="excl-chips" class="chips"></div>
+      </div>
+      <div class="pfoot"><button id="reset">Reset to defaults</button></div>
+    </div>
+  </div>
+  <span id="active-chips" class="chips"></span>
 </div>
 <div class="wrap">
   <table>
@@ -170,10 +206,25 @@
 const $ = s => document.querySelector(s);
 let sort = "relevance", order = "desc";
 
+let excluded = [];
 async function loadFacets() {
   const f = await (await fetch("/api/facets")).json();
-  for (const c of f.companies) $("#company").append(new Option(c, c));
+  for (const c of f.companies) { $("#company").append(new Option(c, c)); $("#excl-pick").append(new Option(c, c)); }
   for (const c of f.categories) $("#category").append(new Option(c, c));
+}
+function since(iso){ if(!iso) return ""; const m=(Date.now()-new Date(iso))/60000;
+  return m<2?"just now":m<60?Math.floor(m)+"m ago":m<1440?Math.floor(m/60)+"h ago":Math.floor(m/1440)+"d ago"; }
+function renderExcluded(){
+  $("#excl-chips").innerHTML = excluded.map(c=>`<span class="chip">${esc(c)} <b data-x="${esc(c)}">×</b></span>`).join("");
+  document.querySelectorAll("#excl-chips b").forEach(b=>b.onclick=()=>{ excluded=excluded.filter(x=>x!==b.dataset.x); renderExcluded(); load(); });
+}
+function activeCount(){
+  let n=excluded.length;
+  for (const id of ["search","company","category","seniority","min_impact","min_relevance"]) if($("#"+id).value) n++;
+  if ($("#max_yoe").value!=="3") n++;          // non-default
+  if (!$("#hide_phd").checked) n++;            // non-default (default on)
+  for (const id of ["yoe_known","has_comp","closed"]) if($("#"+id).checked) n++;
+  return n;
 }
 function fmtComp(r){
   if (r.comp_max) { const k=v=>"$"+Math.round(v/1000)+"k";
@@ -193,6 +244,8 @@ async function load() {
   if ($("#has_comp").checked) p.set("has_comp","true");
   if ($("#yoe_known").checked) p.set("yoe_known","true");
   if ($("#hide_phd").checked) p.set("hide_phd","true");
+  if (excluded.length) p.set("exclude_companies", excluded.join(","));
+  $("#fcount").textContent = activeCount() || "";
   p.set("sort", sort); p.set("order", order); p.set("limit","1000");
   const data = await (await fetch("/api/roles?"+p)).json();
   const tb = $("#rows"); tb.innerHTML = "";
@@ -205,8 +258,8 @@ async function load() {
       : `<span class="yoe ${r.yoe_min<=4?'yoe-ok':'yoe-high'}">${r.yoe_min}</span>`;
     const fit = r.relevance==null ? '<span class="muted">—</span>'
       : `<span class="fit" title="${esc(r.relevance_reason||'')}" style="color:${r.relevance>=70?'#3fb950':r.relevance>=40?'#d29922':'#9aa3b2'}">${r.relevance}</span>`;
-    const phd = r.phd_required ? ` <span class="tag" style="color:#e3b341;border-color:#5a4a1e" title="PhD required">PhD</span>`
-              : (r.phd_mentioned ? ` <span class="tag" title="PhD or equivalent experience">phd?</span>` : "");
+    const phd = r.phd_required ? ` <span class="tag" style="color:#ff7b72;border-color:#5a2a2a" title="PhD required">PhD</span>`
+              : (r.phd_mentioned ? ` <span class="tag" style="color:#e3b341;border-color:#5a4a1e" title="PhD or equivalent experience">phd?</span>` : "");
     tr.innerHTML = `
       <td class="title"><a href="${esc(r.url)}" target="_blank">${esc(r.role_title)}</a>${phd}
           ${r.overview?`<div class="ov">${esc(r.overview)}</div>`:""}</td>
@@ -224,6 +277,7 @@ async function load() {
   }
   const s = await (await fetch("/api/stats")).json();
   $("#stats").textContent = `${data.count} shown · ${s.active} active · ${s.enriched} enriched · ${s.total} total`;
+  $("#updated").textContent = s.last_updated ? `· updated ${since(s.last_updated)}` : "";
 }
 
 document.querySelectorAll("th[data-sort]").forEach(th=>th.onclick=()=>{
@@ -236,8 +290,13 @@ document.querySelectorAll("th[data-sort]").forEach(th=>th.onclick=()=>{
 ["search","company","category","seniority","min_impact","min_relevance","max_yoe","has_comp","yoe_known","hide_phd","closed"].forEach(id=>{
   const el=$("#"+id); el.addEventListener(el.type==="checkbox"||el.tagName==="SELECT"?"change":"input", load);
 });
-$("#reset").onclick=()=>{ document.querySelectorAll("input,select").forEach(e=>{
+$("#filters-btn").onclick=(e)=>{ e.stopPropagation(); $("#panel").classList.toggle("open"); };
+document.addEventListener("click", e=>{ if(!e.target.closest(".fwrap")) $("#panel").classList.remove("open"); });
+$("#excl-pick").onchange=()=>{ const v=$("#excl-pick").value;
+  if(v && !excluded.includes(v)){ excluded.push(v); renderExcluded(); load(); } $("#excl-pick").value=""; };
+$("#reset").onclick=()=>{ document.querySelectorAll("#panel input, #panel select, #search").forEach(e=>{
   if(e.type==="checkbox") e.checked=false; else e.value=""; });
+  excluded=[]; renderExcluded();
   $("#max_yoe").value="3"; $("#hide_phd").checked=true;   // restore defaults: <=3 YOE, no PhD
   sort="relevance"; order="desc"; load(); };
 

@@ -312,7 +312,8 @@ def mark_notified(keys: list[str]) -> None:
 def query_roles(*, username=None, status="active", company=None, category=None,
                 source=None, seniority=None, min_impact=None, min_relevance=None,
                 max_yoe=None, yoe_known=False, hide_phd=False, has_comp=False,
-                search=None, sort="first_seen", order="desc", limit=200, offset=0) -> list[dict]:
+                exclude_companies=None, search=None, sort="first_seen", order="desc",
+                limit=200, offset=0) -> list[dict]:
     init_db()
     where = ["r.status = ?"]
     params: list = [username, status]   # first param feeds the JOIN below
@@ -337,6 +338,9 @@ def query_roles(*, username=None, status="active", company=None, category=None,
     if hide_phd:
         # Hide only HARD PhD requirements (LLM flag); "PhD or equivalent" stays.
         where.append("(phd_required IS NULL OR phd_required = 0)")
+    if exclude_companies:
+        ph = ",".join("?" * len(exclude_companies))
+        where.append(f"company NOT IN ({ph})"); params += list(exclude_companies)
     if has_comp:
         where.append("comp_max IS NOT NULL")
     if search:
@@ -453,5 +457,7 @@ def stats() -> dict:
         row = conn.execute(
             "SELECT COUNT(*) total, "
             "SUM(status='active') active, "
-            "SUM(enriched=1) enriched FROM roles").fetchone()
-        return {"total": row[0], "active": row[1] or 0, "enriched": row[2] or 0}
+            "SUM(enriched=1) enriched, "
+            "MAX(last_seen) last_updated FROM roles").fetchone()
+        return {"total": row[0], "active": row[1] or 0, "enriched": row[2] or 0,
+                "last_updated": row[3]}
