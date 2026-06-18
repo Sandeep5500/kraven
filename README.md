@@ -1,18 +1,34 @@
-# AI Jobs Discovery Runner
+# 🦅 Kraven — AI Jobs
 
-A small scheduled service that polls public **ATS job APIs** for a watchlist of
-~154 AI companies, finds newly posted **ML/SWE** roles, de-duplicates them, and
-posts each new role to a Slack channel via an incoming webhook.
+A self-hosted AI-jobs hunting tool. It polls public **ATS APIs** across a
+watchlist of ~150 AI companies, keeps a deduped database of **US, non-senior,
+AI/ML-centric** roles, **enriches** each with an LLM (overview, comp, YOE, PhD
+requirement, skills, impact), **scores each role's fit against your resume**, and
+serves it all in a fast, filterable web UI — plus an **Apply Kit** that drafts
+outreach/email/referral/essays from your resume and the job description.
 
-Discovery only — no application tracking. ATS public APIs only (no LinkedIn /
-Indeed scraping). Idempotent, resilient to a single company's API failing, and
-**never spams the channel on first run**.
+![Kraven UI](assets/kraven-ui.png)
 
-## How it works
+## Features
+
+- **Filterable UI** — sort by resume-fit / comp / impact, filter by company,
+  category, **Max YOE**, **Min fit**, hide-PhD-required, exclude companies, etc.
+- **LLM enrichment** (OpenAI-compatible endpoint, e.g. a Modal-hosted model):
+  overview, comp range, min YOE, PhD-required, seniority, remote, impact, tags.
+- **Resume-fit scoring (0–100)** per role, with a one-line reason.
+- **Apply Kit** — per role, drafts a LinkedIn DM, recruiter email, referral
+  message, and application-essay answers grounded in your resume + the JD.
+- **Multi-profile** — each person signs up (`/signup`), uploads their own resume,
+  and gets their own scores + apply-kit.
+- **Slack notifications** — new high-impact roles posted with a link into the UI.
+- 7 ATS integrations: Greenhouse, Ashby, Lever, SmartRecruiters, Workable,
+  Workday, Amazon.
+
+## Pipeline
 
 ```
-watchlist_resolved.csv → poll each ATS → normalize → filter ML/SWE titles
-   → de-dupe vs state/seen.json → post new roles to Slack
+poll ATS APIs → normalize → filter (US / non-senior / AI-centric) → SQLite
+   → LLM enrich → resume-fit score → FastAPI + web UI  (+ Slack alerts)
 ```
 
 - **Phase 1 (one-time):** `resolve_ats.py` probes Greenhouse / Ashby / Lever to
