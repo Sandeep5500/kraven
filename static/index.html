@@ -85,7 +85,8 @@
     <h1>KRAVEN<span class="x">.</span></h1>
   </div>
   <span class="stats" id="stats"></span>
-  <span style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+  <span style="margin-left:auto; display:flex; gap:10px; align-items:center;">
+    <span class="stats" id="whoami"></span>
     <input type="file" id="resume-file" accept=".pdf,.txt" style="display:none"/>
     <button id="resume-btn">📄 Upload resume</button>
     <span class="stats" id="resume-status"></span>
@@ -242,9 +243,11 @@ $("#reset").onclick=()=>{ document.querySelectorAll("input,select").forEach(e=>{
 
 // --- resume upload ---
 async function resumeStatus(){
-  try{ const r=await (await fetch("/api/resume")).json();
-    $("#resume-status").textContent = r.uploaded ? `✓ ${r.filename}` : "no resume yet";
-    $("#resume-btn").textContent = r.uploaded ? "📄 Replace resume" : "📄 Upload resume";
+  try{ const me=await (await fetch("/api/me")).json();
+    $("#whoami").textContent = me.username ? `👤 ${me.username}` : "";
+    const up = !!me.resume;
+    $("#resume-status").textContent = up ? `✓ ${me.resume.filename}` : "no resume yet";
+    $("#resume-btn").textContent = up ? "📄 Replace resume" : "📄 Upload resume";
   }catch(e){}
 }
 $("#resume-btn").onclick=()=>$("#resume-file").click();

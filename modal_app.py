@@ -83,6 +83,33 @@ def enrich_once():
     volume.commit()
 
 
+def _cli(*args):
+    import os as _os
+    import subprocess as _sp
+    import sys as _sys
+    _os.chdir("/root/app"); _sys.path.insert(0, "/root/app")
+    _os.environ.update(_ENV)
+    _sp.run(["python", *args], check=False)
+    volume.commit()
+
+
+@app.function(image=image, volumes={STATE: volume})
+def add_user(username: str, password: str):
+    """modal run modal_app.py::add_user --username x --password y"""
+    _cli("users.py", "add", username, password)
+
+
+@app.function(image=image, volumes={STATE: volume})
+def list_users():
+    _cli("users.py", "list")
+
+
+@app.function(image=image, volumes={STATE: volume})
+def migrate_user(username: str):
+    """Move the legacy singleton resume + scores into this profile (one-time)."""
+    _cli("users.py", "migrate", username)
+
+
 @app.function(image=image, volumes={STATE: volume},
               secrets=[app_secret],
               # scale-to-zero: only billed when someone opens the UI (a few-second

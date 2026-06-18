@@ -29,19 +29,13 @@ app = FastAPI(title="Kraven — AI Jobs")
 _security = HTTPBasic(auto_error=False)
 
 
-def _auth(creds: HTTPBasicCredentials | None = Depends(_security)):
-    """Require HTTP Basic only if UI_PASSWORD is set; else open."""
-    pw = os.environ.get("UI_PASSWORD")
-    if not pw:
-        return True
-    user = os.environ.get("UI_USERNAME", "team")
-    ok = creds and secrets.compare_digest(creds.username, user) and \
-        secrets.compare_digest(creds.password, pw)
-    if not ok:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
-                            detail="auth required",
-                            headers={"WWW-Authenticate": "Basic"})
-    return True
+def _auth(creds: HTTPBasicCredentials | None = Depends(_security)) -> str:
+    """HTTP Basic against the users table. Returns the current username."""
+    if creds and db.verify_user(creds.username, creds.password):
+        return creds.username
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="auth required",
+                        headers={"WWW-Authenticate": "Basic"})
 
 
 @app.get("/api/stats")
@@ -54,9 +48,16 @@ def api_facets(_=Depends(_auth)):
     return db.facets()
 
 
+@app.get("/api/me")
+def api_me(user: str = Depends(_auth)):
+    r = db.get_resume(user)
+    return {"username": user, "resume": (
+        {"filename": r["filename"], "chars": len(r["resume_text"])} if r else None)}
+
+
 @app.get("/api/roles")
 def api_roles(
-    _=Depends(_auth),
+    user: str = Depends(_auth),
     status: str = "active",
     company: str | None = None,
     category: str | None = None,
@@ -75,6 +76,7 @@ def api_roles(
     offset: int = 0,
 ):
     rows = db.query_roles(
+        username=user,
         status=status, company=company, category=category, source=source,
         seniority=seniority, min_impact=min_impact, min_relevance=min_relevance,
         max_yoe=max_yoe, yoe_known=yoe_known, hide_phd=hide_phd, has_comp=has_comp,
@@ -96,41 +98,41 @@ def _extract_text(filename: str, raw: bytes) -> str:
 
 
 @app.get("/api/resume")
-def resume_status(_=Depends(_auth)):
-    r = db.get_resume()
-    if not r or not r.get("resume_text"):
+def resume_status(user: str = Depends(_auth)):
+    r = db.get_resume(user)
+    if not r:
         return {"uploaded": False}
     return {"uploaded": True, "filename": r["filename"],
             "updated_at": r["updated_at"], "chars": len(r["resume_text"])}
 
 
 @app.post("/api/resume")
-async def resume_upload(_=Depends(_auth), file: UploadFile = File(...)):
+async def resume_upload(user: str = Depends(_auth), file: UploadFile = File(...)):
     raw = await file.read()
     text = _extract_text(file.filename or "resume", raw)
     if len(text) < 50:
         raise HTTPException(400, "Could not extract text from that file (try a text-based PDF or paste).")
-    db.save_resume(text, file.filename or "resume", now=_now())
-    cleared = db.mark_all_unscored()   # resume changed -> fit scores are stale
+    db.save_resume(user, text, file.filename or "resume", now=_now())
+    cleared = db.mark_all_unscored(user)   # resume changed -> this user's scores are stale
     return {"ok": True, "filename": file.filename, "chars": len(text), "rescore_pending": cleared}
 
 
 @app.post("/api/role/{key}/applykit")
-def applykit(key: str, _=Depends(_auth), force: bool = False):
+def applykit(key: str, user: str = Depends(_auth), force: bool = False):
     if not force:
-        cached = db.get_applykit(key)
+        cached = db.get_applykit(user, key)
         if cached:
             return {"cached": True, "kit": cached}
     role = db.get_role(key)
     if not role:
         raise HTTPException(404, "role not found")
-    resume = db.get_resume()
-    if not resume or not resume.get("resume_text"):
+    resume = db.get_resume(user)
+    if not resume:
         raise HTTPException(400, "Upload your resume first (on the home page).")
     kit = assist.generate(role, resume["resume_text"])
     if not kit:
         raise HTTPException(502, "Generation failed; try again.")
-    db.save_applykit(key, kit, now=_now())
+    db.save_applykit(user, key, kit, now=_now())
     return {"cached": False, "kit": kit, "role": {"company": role["company"],
             "role_title": role["role_title"], "url": role["url"]}}
 
