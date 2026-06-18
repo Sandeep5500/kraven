@@ -111,7 +111,9 @@ def migrate_user(username: str):
 
 
 @app.function(image=image, volumes={STATE: volume},
-              secrets=[app_secret],
+              # app_secret = UI/base-url; model_secret = OPENAI_* for live apply-kit
+              # generation (the /applykit endpoint calls the LLM synchronously).
+              secrets=[app_secret, model_secret],
               # scale-to-zero: only billed when someone opens the UI (a few-second
               # cold start on the first hit after idle). Set min_containers=1 to
               # keep it always-warm if the cold start annoys the team.

@@ -337,7 +337,7 @@ async function genKit(force){
   st.textContent="Generating from your resume… (first time can take ~20s)";
   try{
     const r=await fetch(`/api/role/${encodeURIComponent(kitKey)}/applykit?force=${force?1:0}`,{method:"POST"});
-    if(!r.ok){ const e=await r.json(); throw new Error(e.detail||"failed"); }
+    if(!r.ok){ let m; try{ m=(await r.json()).detail; }catch(_){ m=`server error (HTTP ${r.status})`; } throw new Error(m||"failed"); }
     const d=await r.json(); const k=d.kit;
     if(d.role) $("#ktitle").innerHTML=`✍️ ${esc(d.role.role_title)} — <small>${esc(d.role.company)}</small>`;
     let html=kcard("LinkedIn outreach",k.linkedin_outreach)+kcard("Recruiter email",k.recruiter_email)+kcard("Referral message",k.referral_message);

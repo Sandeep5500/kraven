@@ -31,6 +31,12 @@ poll ATS APIs → normalize → filter (US / non-senior / AI-centric) → SQLite
    → LLM enrich → resume-fit score → FastAPI + web UI  (+ Slack alerts)
 ```
 
+### Apply Kit & filters
+
+| Apply Kit (per role) | Filters |
+|---|---|
+| ![Apply Kit](assets/kraven-applykit.png) | ![Filters](assets/kraven-filters.png) |
+
 - **Phase 1 (one-time):** `resolve_ats.py` probes Greenhouse / Ashby / Lever to
   figure out each company's ATS platform + board token, writing
   `watchlist_resolved.csv`. Big-tech rows on Workday/custom sites resolve to
