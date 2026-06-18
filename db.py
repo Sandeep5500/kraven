@@ -292,7 +292,12 @@ def status_counts(username: str) -> dict:
             "SELECT us.status, COUNT(*) FROM user_status us JOIN roles r ON r.key=us.role_key "
             "WHERE us.username=? AND r.status='active' GROUP BY us.status", (username,)).fetchall())
         waiting, applied = rows.get("waiting", 0), rows.get("applied", 0)
-        return {"new": active - waiting - applied, "waiting": waiting, "applied": applied}
+        stale = conn.execute(
+            "SELECT COUNT(*) FROM user_status us JOIN roles r ON r.key=us.role_key "
+            "WHERE us.username=? AND r.status='active' AND us.status='waiting' "
+            "AND julianday('now') - julianday(us.updated_at) > 5", (username,)).fetchone()[0]
+        return {"new": active - waiting - applied, "waiting": waiting,
+                "applied": applied, "waiting_stale": stale}
 
 
 # --- relevance scoring (per user, resume-dependent) --------------------------

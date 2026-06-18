@@ -51,6 +51,8 @@
   .tab:hover { color:var(--txt); }
   .tab.active { color:var(--txt); border-bottom-color:var(--orange); font-weight:600; }
   .tcount { background:#1d2230; border-radius:9px; padding:0 6px; font-size:11px; margin-left:3px; }
+  .stale { color:#ff7b72; font-size:11px; margin-left:5px; font-weight:700; }
+  .stale:empty { display:none; }
   .statsel { font-size:11px; padding:2px 4px; }
   .age { font-size:11px; font-weight:700; margin-top:3px; }
   .wrap { padding:0 12px; }
@@ -174,7 +176,7 @@
 </div>
 <div class="tabs">
   <button class="tab active" data-tab="new">New <span class="tcount" id="cnt-new"></span></button>
-  <button class="tab" data-tab="waiting">⏳ Waiting <span class="tcount" id="cnt-waiting"></span></button>
+  <button class="tab" data-tab="waiting">⏳ Waiting <span class="tcount" id="cnt-waiting"></span><span class="stale" id="stale-badge"></span></button>
   <button class="tab" data-tab="applied">✓ Applied <span class="tcount" id="cnt-applied"></span></button>
 </div>
 <div class="wrap">
@@ -193,7 +195,7 @@
       <th data-sort="relevance" class="sorted" title="Fit vs your resume (0-100)">Fit</th>
       <th data-sort="impact">Impact</th>
       <th>Tags</th>
-      <th data-sort="first_seen">Seen</th>
+      <th data-sort="first_seen" id="th-seen">Seen</th>
       <th></th>
     </tr></thead>
     <tbody id="rows"></tbody>
@@ -232,7 +234,8 @@ function daysSince(iso){ return (Date.now()-new Date(iso))/86400000; }
 function ageColor(d){ const t=Math.max(0,Math.min(1,d/5)); return `hsl(${Math.round(120*(1-t))},65%,55%)`; }  // 1d green → 5d red
 let currentTab="new";
 async function loadCounts(){ try{ const c=await (await fetch("/api/counts")).json();
-  $("#cnt-new").textContent=c.new; $("#cnt-waiting").textContent=c.waiting; $("#cnt-applied").textContent=c.applied; }catch(e){} }
+  $("#cnt-new").textContent=c.new; $("#cnt-waiting").textContent=c.waiting; $("#cnt-applied").textContent=c.applied;
+  $("#stale-badge").textContent = c.waiting_stale ? `⚠ ${c.waiting_stale} stale` : ""; }catch(e){} }
 function renderExcluded(){
   $("#excl-chips").innerHTML = excluded.map(c=>`<span class="chip">${esc(c)} <b data-x="${esc(c)}">×</b></span>`).join("");
   document.querySelectorAll("#excl-chips b").forEach(b=>b.onclick=()=>{ excluded=excluded.filter(x=>x!==b.dataset.x); renderExcluded(); load(); });
@@ -279,8 +282,9 @@ async function load() {
     const fit = r.relevance==null ? '<span class="muted">—</span>'
       : `<span class="fit" title="${esc(r.relevance_reason||'')}" style="color:${r.relevance>=70?'#3fb950':r.relevance>=40?'#d29922':'#9aa3b2'}">${r.relevance}</span>`;
     const stOpts = ["new","waiting","applied"].map(s=>`<option value="${s}" ${r.status===s?"selected":""}>${s[0].toUpperCase()+s.slice(1)}</option>`).join("");
-    const age = (r.status!=="new" && r.status_since)
-      ? `<div class="age" style="color:${ageColor(daysSince(r.status_since))}">⏱ ${since(r.status_since)}</div>` : "";
+    const seen = (currentTab!=="new" && r.status_since)
+      ? `<span class="age" style="color:${ageColor(daysSince(r.status_since))}" title="in ${currentTab} for ${since(r.status_since)}">⏱ ${since(r.status_since)}</span>`
+      : `<span class="muted">${ago(r.first_seen)}</span>`;
     const phd = r.phd_required ? ` <span class="tag" style="color:#ff7b72;border-color:#5a2a2a" title="PhD required">PhD</span>`
               : (r.phd_mentioned ? ` <span class="tag" style="color:#e3b341;border-color:#5a4a1e" title="PhD or equivalent experience">phd?</span>` : "");
     tr.innerHTML = `
@@ -293,10 +297,10 @@ async function load() {
       <td>${fit}</td>
       <td>${imp}</td>
       <td>${tags}</td>
-      <td class="muted">${ago(r.first_seen)}</td>
+      <td>${seen}</td>
       <td class="actions"><a class="apply" href="${esc(r.url)}" target="_blank">Apply ↗</a>
           <a class="kit" data-key="${esc(r.key)}" title="Generate outreach + essays">✍️ Kit</a>
-          <select class="statsel" data-key="${esc(r.key)}" title="Move to a pipeline stage">${stOpts}</select>${age}</td>`;
+          <select class="statsel" data-key="${esc(r.key)}" title="Move to a pipeline stage">${stOpts}</select></td>`;
     tb.append(tr);
   }
   const s = await (await fetch("/api/stats")).json();
@@ -386,9 +390,16 @@ $("#rows").addEventListener("change", async e=>{
 document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>{
   document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
   t.classList.add("active"); currentTab=t.dataset.tab;
+  const seenTh=$("#th-seen");
   if (currentTab==="waiting"){ sort="status_since"; order="asc"; }     // oldest (most overdue) first
   else if (currentTab==="applied"){ sort="status_since"; order="desc"; }
   else { sort="relevance"; order="desc"; }
+  // adaptive "Seen" header: sorts/labels by status age in waiting/applied
+  seenTh.dataset.sort = currentTab==="new" ? "first_seen" : "status_since";
+  seenTh.textContent  = currentTab==="waiting" ? "Waiting" : currentTab==="applied" ? "Applied" : "Seen";
+  document.querySelectorAll("th").forEach(h=>h.classList.remove("sorted","asc"));
+  const activeTh = currentTab==="new" ? document.querySelector('th[data-sort="relevance"]') : seenTh;
+  activeTh.classList.add("sorted"); if(order==="asc") activeTh.classList.add("asc");
   load();
 });
 
