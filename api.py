@@ -71,7 +71,7 @@ def api_roles(
     hide_phd: bool = False,
     has_comp: bool = False,
     exclude_companies: str | None = None,
-    show_applied: bool = False,
+    tab: str = "new",
     search: str | None = None,
     sort: str = "first_seen",
     order: str = "desc",
@@ -84,7 +84,7 @@ def api_roles(
         seniority=seniority, min_impact=min_impact, min_relevance=min_relevance,
         max_yoe=max_yoe, yoe_known=yoe_known, hide_phd=hide_phd, has_comp=has_comp,
         exclude_companies=[c for c in (exclude_companies or "").split(",") if c],
-        show_applied=show_applied,
+        tab=tab,
         search=search, sort=sort, order=order, limit=limit, offset=offset,
     )
     return {"count": len(rows), "roles": rows}
@@ -142,10 +142,15 @@ def applykit(key: str, user: str = Depends(_auth), force: bool = False):
             "role_title": role["role_title"], "url": role["url"]}}
 
 
-@app.post("/api/role/{key}/applied")
-def mark_applied(key: str, user: str = Depends(_auth), applied: bool = True):
-    db.set_applied(user, key, applied, now=_now())
-    return {"ok": True, "applied": applied}
+@app.post("/api/role/{key}/status")
+def set_status(key: str, user: str = Depends(_auth), status: str = "new"):
+    db.set_status(user, key, status, now=_now())
+    return {"ok": True, "status": status}
+
+
+@app.get("/api/counts")
+def api_counts(user: str = Depends(_auth)):
+    return db.status_counts(user)
 
 
 @app.get("/api/role/{key}")

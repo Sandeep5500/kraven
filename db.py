@@ -89,14 +89,15 @@ CREATE TABLE IF NOT EXISTS user_scores (
 );
 CREATE INDEX IF NOT EXISTS idx_uscores_user ON user_scores(username);
 
--- Per-user "applied" marks (hidden from the default view).
-CREATE TABLE IF NOT EXISTS user_applied (
+-- Per-user pipeline status. No row = "new"; otherwise 'waiting' or 'applied'.
+CREATE TABLE IF NOT EXISTS user_status (
     username   TEXT,
     role_key   TEXT,
-    applied_at TEXT,
+    status     TEXT,            -- waiting | applied
+    updated_at TEXT,            -- when moved to this status (for age coloring)
     PRIMARY KEY (username, role_key)
 );
-CREATE INDEX IF NOT EXISTS idx_uapplied_user ON user_applied(username);
+CREATE INDEX IF NOT EXISTS idx_ustatus_user ON user_status(username);
 
 -- Per-user apply-kit cache.
 CREATE TABLE IF NOT EXISTS applykit (
@@ -141,6 +142,13 @@ def init_db() -> None:
         if ak and "username" not in ak:
             conn.execute("DROP TABLE applykit")
         conn.executescript(_SCHEMA)
+        # Migrate legacy user_applied -> user_status('applied'), once.
+        legacy = conn.execute("SELECT name FROM sqlite_master WHERE type='table' "
+                              "AND name='user_applied'").fetchone()
+        if legacy:
+            conn.execute("INSERT OR IGNORE INTO user_status (username, role_key, status, updated_at) "
+                         "SELECT username, role_key, 'applied', applied_at FROM user_applied")
+            conn.execute("DROP TABLE user_applied")
         existing = {r[1] for r in conn.execute("PRAGMA table_info(roles)").fetchall()}
         for col, typ in _MIGRATIONS.items():
             if col not in existing:
@@ -254,20 +262,37 @@ def list_users() -> list[str]:
 
 def delete_user(username: str) -> None:
     with connect() as conn:
-        for t in ("users", "user_scores", "user_applied", "applykit"):
-            col = "username"
-            conn.execute(f"DELETE FROM {t} WHERE {col}=?", (username,))
+        for t in ("users", "user_scores", "user_status", "applykit"):
+            conn.execute(f"DELETE FROM {t} WHERE username=?", (username,))
 
 
-def set_applied(username: str, key: str, applied: bool, *, now: str) -> None:
+STATUSES = ("new", "waiting", "applied")
+
+
+def set_status(username: str, key: str, status: str, *, now: str) -> None:
+    """status: 'new' (clears the row), 'waiting', or 'applied'."""
     init_db()
     with connect() as conn:
-        if applied:
-            conn.execute("INSERT OR IGNORE INTO user_applied (username, role_key, applied_at) "
-                         "VALUES (?,?,?)", (username, key, now))
-        else:
-            conn.execute("DELETE FROM user_applied WHERE username=? AND role_key=?",
+        if status == "new" or status not in STATUSES:
+            conn.execute("DELETE FROM user_status WHERE username=? AND role_key=?",
                          (username, key))
+        else:
+            conn.execute(
+                "INSERT INTO user_status (username, role_key, status, updated_at) VALUES (?,?,?,?) "
+                "ON CONFLICT(username, role_key) DO UPDATE SET status=excluded.status, "
+                "updated_at=excluded.updated_at",
+                (username, key, status, now))
+
+
+def status_counts(username: str) -> dict:
+    init_db()
+    with connect() as conn:
+        active = conn.execute("SELECT COUNT(*) FROM roles WHERE status='active'").fetchone()[0]
+        rows = dict(conn.execute(
+            "SELECT us.status, COUNT(*) FROM user_status us JOIN roles r ON r.key=us.role_key "
+            "WHERE us.username=? AND r.status='active' GROUP BY us.status", (username,)).fetchall())
+        waiting, applied = rows.get("waiting", 0), rows.get("applied", 0)
+        return {"new": active - waiting - applied, "waiting": waiting, "applied": applied}
 
 
 # --- relevance scoring (per user, resume-dependent) --------------------------
@@ -332,7 +357,7 @@ def mark_notified(keys: list[str]) -> None:
 def query_roles(*, username=None, status="active", company=None, category=None,
                 source=None, seniority=None, min_impact=None, min_relevance=None,
                 max_yoe=None, yoe_known=False, hide_phd=False, has_comp=False,
-                exclude_companies=None, show_applied=False, search=None,
+                exclude_companies=None, tab="new", search=None,
                 sort="first_seen", order="desc", limit=200, offset=0) -> list[dict]:
     init_db()
     where = ["r.status = ?"]
@@ -361,23 +386,27 @@ def query_roles(*, username=None, status="active", company=None, category=None,
     if exclude_companies:
         ph = ",".join("?" * len(exclude_companies))
         where.append(f"company NOT IN ({ph})"); params += list(exclude_companies)
-    if not show_applied:
-        where.append("a.role_key IS NULL")   # hide roles this user marked applied
+    if tab == "waiting":
+        where.append("a.status = 'waiting'")
+    elif tab == "applied":
+        where.append("a.status = 'applied'")
+    else:  # "new": not yet in any pipeline status
+        where.append("a.status IS NULL")
     if has_comp:
         where.append("comp_max IS NOT NULL")
     if search:
         where.append("(role_title LIKE ? OR company LIKE ? OR overview LIKE ?)")
         params += [f"%{search}%"] * 3
     allowed_sort = {"first_seen", "comp_max", "impact", "company", "role_title",
-                    "yoe_min", "relevance"}
+                    "yoe_min", "relevance", "status_since"}
     sort = sort if sort in allowed_sort else "first_seen"
-    sort_col = "s.relevance" if sort == "relevance" else "r." + sort
+    sort_col = {"relevance": "s.relevance", "status_since": "a.updated_at"}.get(sort, "r." + sort)
     order = "DESC" if str(order).lower() != "asc" else "ASC"
     q = (f"SELECT r.*, s.relevance AS u_rel, s.reason AS u_reason, "
-         f"(a.role_key IS NOT NULL) AS u_applied "
+         f"a.status AS u_status, a.updated_at AS u_since "
          f"FROM roles r "
          f"LEFT JOIN user_scores s ON s.role_key=r.key AND s.username=? "
-         f"LEFT JOIN user_applied a ON a.role_key=r.key AND a.username=? "
+         f"LEFT JOIN user_status a ON a.role_key=r.key AND a.username=? "
          f"WHERE {' AND '.join(where)} "
          f"ORDER BY {sort_col} {order} NULLS LAST LIMIT ? OFFSET ?")
     params += [int(limit), int(offset)]
@@ -386,7 +415,8 @@ def query_roles(*, username=None, status="active", company=None, category=None,
     for r in rows:
         r["relevance"] = r.pop("u_rel", None)             # per-user score
         r["relevance_reason"] = r.pop("u_reason", None)
-        r["applied"] = bool(r.pop("u_applied", 0))        # per-user applied mark
+        r["status"] = r.pop("u_status", None) or "new"    # per-user pipeline status
+        r["status_since"] = r.pop("u_since", None)
         desc = (r.pop("description", "") or "").lower()   # drop heavy JD from list payload
         r["phd_mentioned"] = 1 if any(k in desc for k in
                                       ("phd", "ph.d", "doctoral", "doctorate")) else 0
