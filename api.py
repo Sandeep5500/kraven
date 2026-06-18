@@ -18,6 +18,7 @@ from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from pydantic import BaseModel
 
 import assist
 import config
@@ -143,6 +144,35 @@ def role_detail(key: str, _=Depends(_auth)):
     if not role:
         raise HTTPException(404, "role not found")
     return role
+
+
+class SignupReq(BaseModel):
+    username: str
+    password: str
+    code: str = ""
+
+
+@app.post("/api/signup")
+def signup(req: SignupReq):
+    code = os.environ.get("SIGNUP_CODE")
+    if not code:
+        raise HTTPException(403, "Self-signup is disabled.")
+    if req.code.strip() != code:
+        raise HTTPException(403, "Invalid invite code.")
+    u = req.username.strip().lower()
+    if not u.isidentifier():
+        raise HTTPException(400, "Username must be letters/numbers/underscore.")
+    if len(req.password) < 4:
+        raise HTTPException(400, "Password too short.")
+    if db.user_exists(u):
+        raise HTTPException(400, "That username is taken.")
+    db.create_user(u, req.password, now=_now())
+    return {"ok": True, "username": u}
+
+
+@app.get("/signup")
+def signup_page():
+    return FileResponse(config.ROOT / "static" / "signup.html")
 
 
 @app.get("/")

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Create profile — Kraven</title>
+<style>
+  :root { --bg:#0f1115; --panel:#171a21; --line:#262b36; --txt:#e6e8ec; --mut:#9aa3b2; --orange:#e0793b; --good:#3fb950; }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;
+       display:flex; min-height:100vh; align-items:center; justify-content:center;}
+  .box{width:340px; background:var(--panel); border:1px solid var(--line); border-top:2px solid var(--orange);
+       border-radius:10px; padding:22px;}
+  .brand{display:flex; align-items:center; gap:9px; margin-bottom:4px;}
+  h1{font-size:18px; margin:0; letter-spacing:.3px;}
+  .sub{color:var(--mut); font-size:12.5px; margin:2px 0 18px;}
+  label{display:block; font-size:12px; color:var(--mut); margin:12px 0 4px;}
+  input{width:100%; background:#12151c; color:var(--txt); border:1px solid var(--line); border-radius:6px; padding:9px;}
+  button{width:100%; margin-top:18px; background:var(--orange); color:#10110f; border:none; border-radius:6px;
+         padding:10px; font-weight:700; cursor:pointer;}
+  button:hover{filter:brightness(1.08);}
+  .msg{margin-top:14px; font-size:13px;}
+  .err{color:#ff7b72;} .ok{color:var(--good);}
+  a{color:var(--orange); text-decoration:none;}
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="brand">
+    <svg width="24" height="24" viewBox="0 0 24 24"><g fill="none" stroke="var(--orange)" stroke-width="2.3" stroke-linecap="round">
+      <path d="M6.5 3.5 C7.2 9, 7.6 15, 8.2 20.5"/><path d="M11.8 2.6 C12.4 8.5, 12.7 14.8, 13 21.2"/><path d="M17 3.6 C17.4 9, 17.4 15, 17 20.4"/></g></svg>
+    <h1>KRAVEN<span style="color:var(--orange)">.</span></h1>
+  </div>
+  <div class="sub">Create your profile — your own resume &amp; Fit scores.</div>
+  <label>Username</label><input id="u" autocomplete="username" placeholder="e.g. alice"/>
+  <label>Password</label><input id="p" type="password" autocomplete="new-password"/>
+  <label>Invite code</label><input id="c" placeholder="ask your team"/>
+  <button id="go">Create profile</button>
+  <div class="msg" id="msg"></div>
+</div>
+<script>
+const $=s=>document.querySelector(s);
+$("#go").onclick=async()=>{
+  $("#msg").textContent=""; $("#msg").className="msg";
+  const body={username:$("#u").value, password:$("#p").value, code:$("#c").value};
+  try{
+    const r=await fetch("/api/signup",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.detail||"failed");
+    $("#msg").className="msg ok";
+    $("#msg").innerHTML=`✓ Profile <b>${d.username}</b> created. <a href="/">Open Kraven</a> and sign in with these credentials.`;
+  }catch(e){ $("#msg").className="msg err"; $("#msg").textContent="✗ "+e.message; }
+};
+$("#c").addEventListener("keydown",e=>{ if(e.key==="Enter") $("#go").click(); });
+</script>
+</body>
+</html>

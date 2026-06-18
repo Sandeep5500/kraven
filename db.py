@@ -231,6 +231,12 @@ def verify_user(username: str, password: str) -> bool:
     return bool(r) and hmac.compare_digest(r[0], hash_pw(password))
 
 
+def user_exists(username: str) -> bool:
+    init_db()
+    with connect() as conn:
+        return conn.execute("SELECT 1 FROM users WHERE username=?", (username,)).fetchone() is not None
+
+
 def list_users() -> list[str]:
     init_db()
     with connect() as conn:
