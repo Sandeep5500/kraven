@@ -89,6 +89,15 @@ CREATE TABLE IF NOT EXISTS user_scores (
 );
 CREATE INDEX IF NOT EXISTS idx_uscores_user ON user_scores(username);
 
+-- Per-user "applied" marks (hidden from the default view).
+CREATE TABLE IF NOT EXISTS user_applied (
+    username   TEXT,
+    role_key   TEXT,
+    applied_at TEXT,
+    PRIMARY KEY (username, role_key)
+);
+CREATE INDEX IF NOT EXISTS idx_uapplied_user ON user_applied(username);
+
 -- Per-user apply-kit cache.
 CREATE TABLE IF NOT EXISTS applykit (
     username   TEXT,
@@ -245,9 +254,20 @@ def list_users() -> list[str]:
 
 def delete_user(username: str) -> None:
     with connect() as conn:
-        conn.execute("DELETE FROM users WHERE username=?", (username,))
-        conn.execute("DELETE FROM user_scores WHERE username=?", (username,))
-        conn.execute("DELETE FROM applykit WHERE username=?", (username,))
+        for t in ("users", "user_scores", "user_applied", "applykit"):
+            col = "username"
+            conn.execute(f"DELETE FROM {t} WHERE {col}=?", (username,))
+
+
+def set_applied(username: str, key: str, applied: bool, *, now: str) -> None:
+    init_db()
+    with connect() as conn:
+        if applied:
+            conn.execute("INSERT OR IGNORE INTO user_applied (username, role_key, applied_at) "
+                         "VALUES (?,?,?)", (username, key, now))
+        else:
+            conn.execute("DELETE FROM user_applied WHERE username=? AND role_key=?",
+                         (username, key))
 
 
 # --- relevance scoring (per user, resume-dependent) --------------------------
@@ -312,11 +332,11 @@ def mark_notified(keys: list[str]) -> None:
 def query_roles(*, username=None, status="active", company=None, category=None,
                 source=None, seniority=None, min_impact=None, min_relevance=None,
                 max_yoe=None, yoe_known=False, hide_phd=False, has_comp=False,
-                exclude_companies=None, search=None, sort="first_seen", order="desc",
-                limit=200, offset=0) -> list[dict]:
+                exclude_companies=None, show_applied=False, search=None,
+                sort="first_seen", order="desc", limit=200, offset=0) -> list[dict]:
     init_db()
     where = ["r.status = ?"]
-    params: list = [username, status]   # first param feeds the JOIN below
+    params: list = [username, username, status]   # 2 JOINs (scores, applied) then status
     if company:
         where.append("company = ?"); params.append(company)
     if category:
@@ -341,6 +361,8 @@ def query_roles(*, username=None, status="active", company=None, category=None,
     if exclude_companies:
         ph = ",".join("?" * len(exclude_companies))
         where.append(f"company NOT IN ({ph})"); params += list(exclude_companies)
+    if not show_applied:
+        where.append("a.role_key IS NULL")   # hide roles this user marked applied
     if has_comp:
         where.append("comp_max IS NOT NULL")
     if search:
@@ -351,8 +373,11 @@ def query_roles(*, username=None, status="active", company=None, category=None,
     sort = sort if sort in allowed_sort else "first_seen"
     sort_col = "s.relevance" if sort == "relevance" else "r." + sort
     order = "DESC" if str(order).lower() != "asc" else "ASC"
-    q = (f"SELECT r.*, s.relevance AS u_rel, s.reason AS u_reason "
-         f"FROM roles r LEFT JOIN user_scores s ON s.role_key=r.key AND s.username=? "
+    q = (f"SELECT r.*, s.relevance AS u_rel, s.reason AS u_reason, "
+         f"(a.role_key IS NOT NULL) AS u_applied "
+         f"FROM roles r "
+         f"LEFT JOIN user_scores s ON s.role_key=r.key AND s.username=? "
+         f"LEFT JOIN user_applied a ON a.role_key=r.key AND a.username=? "
          f"WHERE {' AND '.join(where)} "
          f"ORDER BY {sort_col} {order} NULLS LAST LIMIT ? OFFSET ?")
     params += [int(limit), int(offset)]
@@ -361,6 +386,7 @@ def query_roles(*, username=None, status="active", company=None, category=None,
     for r in rows:
         r["relevance"] = r.pop("u_rel", None)             # per-user score
         r["relevance_reason"] = r.pop("u_reason", None)
+        r["applied"] = bool(r.pop("u_applied", 0))        # per-user applied mark
         desc = (r.pop("description", "") or "").lower()   # drop heavy JD from list payload
         r["phd_mentioned"] = 1 if any(k in desc for k in
                                       ("phd", "ph.d", "doctoral", "doctorate")) else 0

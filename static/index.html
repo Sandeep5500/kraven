@@ -65,6 +65,7 @@
   td.actions a { display:inline-block; }
   .kit { color:var(--orange); text-decoration:none; cursor:pointer; }
   .kit:hover { color:#ffa46a; }
+  .appl { color:var(--mut); font-size:11px; display:flex; gap:4px; align-items:center; cursor:pointer; }
   button:hover { border-color:var(--orange); }
   /* apply-kit modal */
   .overlay { position:fixed; inset:0; background:rgba(0,0,0,0.6); display:none; z-index:50;
@@ -152,6 +153,7 @@
         <label class="chk"><input type="checkbox" id="yoe_known"/> Stated YOE only</label>
         <label class="chk"><input type="checkbox" id="has_comp"/> Has comp</label>
         <label class="chk"><input type="checkbox" id="closed"/> Show closed</label>
+        <label class="chk" title="Show roles you've marked applied"><input type="checkbox" id="show_applied"/> Show applied</label>
       </div>
       <div class="pexcl">
         <label>Exclude companies</label>
@@ -223,7 +225,7 @@ function activeCount(){
   for (const id of ["search","company","category","seniority","min_impact","min_relevance"]) if($("#"+id).value) n++;
   if ($("#max_yoe").value!=="3") n++;          // non-default
   if (!$("#hide_phd").checked) n++;            // non-default (default on)
-  for (const id of ["yoe_known","has_comp","closed"]) if($("#"+id).checked) n++;
+  for (const id of ["yoe_known","has_comp","closed","show_applied"]) if($("#"+id).checked) n++;
   return n;
 }
 function fmtComp(r){
@@ -244,6 +246,7 @@ async function load() {
   if ($("#has_comp").checked) p.set("has_comp","true");
   if ($("#yoe_known").checked) p.set("yoe_known","true");
   if ($("#hide_phd").checked) p.set("hide_phd","true");
+  if ($("#show_applied").checked) p.set("show_applied","true");
   if (excluded.length) p.set("exclude_companies", excluded.join(","));
   $("#fcount").textContent = activeCount() || "";
   p.set("sort", sort); p.set("order", order); p.set("limit","1000");
@@ -272,7 +275,8 @@ async function load() {
       <td>${tags}</td>
       <td class="muted">${ago(r.first_seen)}</td>
       <td class="actions"><a class="apply" href="${esc(r.url)}" target="_blank">Apply ↗</a>
-          <a class="kit" data-key="${esc(r.key)}" title="Generate outreach + essays">✍️ Kit</a></td>`;
+          <a class="kit" data-key="${esc(r.key)}" title="Generate outreach + essays">✍️ Kit</a>
+          <label class="appl" title="Mark as applied (hides it)"><input type="checkbox" class="appl-box" data-key="${esc(r.key)}" ${r.applied?"checked":""}/> applied</label></td>`;
     tb.append(tr);
   }
   const s = await (await fetch("/api/stats")).json();
@@ -287,7 +291,7 @@ document.querySelectorAll("th[data-sort]").forEach(th=>th.onclick=()=>{
   th.classList.add("sorted"); if(order==="asc") th.classList.add("asc");
   load();
 });
-["search","company","category","seniority","min_impact","min_relevance","max_yoe","has_comp","yoe_known","hide_phd","closed"].forEach(id=>{
+["search","company","category","seniority","min_impact","min_relevance","max_yoe","has_comp","yoe_known","hide_phd","closed","show_applied"].forEach(id=>{
   const el=$("#"+id); el.addEventListener(el.type==="checkbox"||el.tagName==="SELECT"?"change":"input", load);
 });
 $("#filters-btn").onclick=(e)=>{ e.stopPropagation(); $("#panel").classList.toggle("open"); };
@@ -353,6 +357,11 @@ $("#kregen").onclick=()=>genKit(true);
 $("#overlay").onclick=(e)=>{ if(e.target.id==="overlay") closeKit(); };
 document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeKit(); });
 $("#rows").addEventListener("click",e=>{ const a=e.target.closest(".kit"); if(a){ e.preventDefault(); openKit(a.dataset.key); } });
+$("#rows").addEventListener("change", async e=>{
+  const c=e.target.closest(".appl-box"); if(!c) return;
+  await fetch(`/api/role/${encodeURIComponent(c.dataset.key)}/applied?applied=${c.checked}`,{method:"POST"});
+  load();   // re-query: applied roles drop out (unless 'Show applied' is on)
+});
 
 loadFacets().then(load);
 </script>
