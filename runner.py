@@ -28,7 +28,7 @@ import config
 import db
 import dedupe
 import slack
-from normalize import dedupe_key, is_us_location, title_matches
+from normalize import dedupe_key, is_stale_or_intern, is_us_location, title_matches
 from pollers import (amazon, ashby, greenhouse, lever, smartrecruiters, workable,
                      workday)
 
@@ -103,6 +103,8 @@ def _keep(record: dict) -> bool:
         return False
     if config.US_ONLY and not is_us_location(record.get("location", ""),
                                              record.get("country", "")):
+        return False
+    if is_stale_or_intern(record.get("role_title", ""), record.get("description", "")):
         return False
     return True
 

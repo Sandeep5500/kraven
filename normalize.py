@@ -215,6 +215,33 @@ def title_matches(title: str) -> bool:
     return False
 
 
+_COHORT_YEAR = re.compile(
+    r"\b(20\d\d)\s+(?:intern|internship|new\s*grad|graduate|co\s*op|cohort)\b"
+    r"|\b(?:intern|internship|new\s*grad|graduate|cohort|class\s+of|co\s*op)\s+(?:of\s+)?(20\d\d)\b")
+
+
+def is_stale_or_intern(title: str, description: str) -> bool:
+    """Drop roles whose clean-looking title hides an internship or a stale
+    past-year cohort. Kept tight to avoid nuking real full-time roles:
+      - internship named in the title or the description's intro (~first 150 chars)
+      - a PAST year sitting directly next to a cohort word ("2024 internship",
+        "class of 2025") — not merely a year mentioned somewhere in the text.
+    """
+    if not config.FILTER_STALE_CONTENT:
+        return False
+    intro = " " + re.sub(r"[^a-z0-9 ]", " ",
+                         ((title or "") + " " + (description or "")[:150]).lower()) + " "
+    if not config.INCLUDE_INTERNS and re.search(r"\bintern(ship)?s?\b", intro):
+        return True
+    cur = datetime.now(timezone.utc).year
+    blob = ((title or "") + " " + (description or "")[:400]).lower()
+    for m in _COHORT_YEAR.finditer(blob):
+        yr = next((int(g) for g in m.groups() if g and g.isdigit()), None)
+        if yr and yr < cur:
+            return True
+    return False
+
+
 def _is_senior(normalized: str) -> bool:
     """True if the title looks senior+. 'staff' is ignored when it's part of a
     kept phrase like 'Member of Technical Staff'."""

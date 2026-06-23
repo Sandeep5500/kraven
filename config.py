@@ -144,6 +144,11 @@ EXCLUDE_TITLE_TERMS = [
 INCLUDE_INTERNS = False
 INTERN_TERMS = ["intern", "internship"]
 
+# Drop stale/mismatched postings whose TITLE looks fine but whose description
+# gives them away: an internship stated up front, or a past-year cohort
+# (e.g. a recycled "2024 ... Internship" re-dated to look current).
+FILTER_STALE_CONTENT = True
+
 # --- Seniority filter --------------------------------------------------------
 # EXCLUDE_SENIOR drops senior/staff/principal/lead/etc. so the feed skews
 # mid-level and below. ("manager", "director", "vp" are already excluded above.)
