@@ -182,9 +182,10 @@
 <div class="wrap">
   <table>
     <colgroup>
-      <col style="width:28%"><col style="width:9%"><col style="width:12%">
-      <col style="width:9%"><col style="width:6%"><col style="width:8%">
-      <col style="width:5%"><col style="width:13%"><col style="width:4%"><col style="width:6%">
+      <col style="width:26%"><col style="width:8%"><col style="width:11%">
+      <col style="width:8%"><col style="width:5%"><col style="width:6%">
+      <col style="width:5%"><col style="width:7%"><col style="width:11%">
+      <col style="width:4%"><col style="width:9%">
     </colgroup>
     <thead><tr>
       <th data-sort="role_title">Role</th>
@@ -194,6 +195,7 @@
       <th data-sort="yoe_min" title="Min years of experience required">YOE</th>
       <th data-sort="relevance" class="sorted" title="Fit vs your resume (0-100)">Fit</th>
       <th data-sort="impact">Impact</th>
+      <th>Posted</th>
       <th>Tags</th>
       <th data-sort="first_seen" id="th-seen">Seen</th>
       <th></th>
@@ -231,6 +233,14 @@ async function loadFacets() {
 function since(iso){ if(!iso) return ""; const m=(Date.now()-new Date(iso))/60000;
   return m<2?"just now":m<60?Math.floor(m)+"m ago":m<1440?Math.floor(m/60)+"h ago":Math.floor(m/1440)+"d ago"; }
 function daysSince(iso){ return (Date.now()-new Date(iso))/86400000; }
+function postedDisp(s){
+  if(!s) return '<span class="muted">—</span>';
+  const d=new Date(s); if(isNaN(d)) return '<span class="muted">—</span>';
+  const days=(Date.now()-d)/86400000;
+  const lab = days<1?"today" : days<30?Math.floor(days)+"d" : days<365?Math.floor(days/30)+"mo" : Math.floor(days/365)+"y";
+  const col = days>120?'#ff7b72' : days>60?'#d29922' : 'var(--mut)';   // old postings stand out
+  return `<span style="color:${col}" title="posted ${d.toISOString().slice(0,10)}">${lab}</span>`;
+}
 function ageColor(d){ const t=Math.max(0,Math.min(1,d/5)); return `hsl(${Math.round(120*(1-t))},65%,55%)`; }  // 1d green → 5d red
 let currentTab="new";
 async function loadCounts(){ try{ const c=await (await fetch("/api/counts")).json();
@@ -296,6 +306,7 @@ async function load() {
       <td>${yoe}</td>
       <td>${fit}</td>
       <td>${imp}</td>
+      <td>${postedDisp(r.posted_at)}</td>
       <td>${tags}</td>
       <td>${seen}</td>
       <td class="actions"><a class="apply" href="${esc(r.url)}" target="_blank">Apply ↗</a>
