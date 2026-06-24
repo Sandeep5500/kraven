@@ -238,8 +238,9 @@ function postedDisp(s){
   const d=new Date(s); if(isNaN(d)) return '<span class="muted">—</span>';
   const days=(Date.now()-d)/86400000;
   const lab = days<1?"today" : days<30?Math.floor(days)+"d" : days<365?Math.floor(days/30)+"mo" : Math.floor(days/365)+"y";
-  const col = days>120?'#ff7b72' : days>60?'#d29922' : 'var(--mut)';   // old postings stand out
-  return `<span style="color:${col}" title="posted ${d.toISOString().slice(0,10)}">${lab}</span>`;
+  // Informational only — every listed role is still active, so a long-open req
+  // (e.g. "1y") is NOT stale. No alarm colors; exact date on hover.
+  return `<span class="muted" title="published ${d.toISOString().slice(0,10)} (still active)">${lab}</span>`;
 }
 function ageColor(d){ const t=Math.max(0,Math.min(1,d/5)); return `hsl(${Math.round(120*(1-t))},65%,55%)`; }  // 1d green → 5d red
 let currentTab="new";
