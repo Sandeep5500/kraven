@@ -14,6 +14,7 @@ import hmac
 import json
 import sqlite3
 from contextlib import contextmanager
+from datetime import date, timedelta
 
 import config
 
@@ -25,8 +26,8 @@ def hash_pw(password: str) -> str:
 # department/team (per role); `company_category` is the watchlist bucket
 # (Frontier, Infra, ...) used for the UI's category filter.
 _RECORD_COLS = ["company", "company_category", "role_title", "location", "url",
-                "category", "posted_at", "source_platform", "job_id", "country",
-                "description"]
+                "category", "posted_at", "posted_ts", "source_platform", "job_id",
+                "country", "description"]
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS roles (
@@ -38,6 +39,7 @@ CREATE TABLE IF NOT EXISTS roles (
     url             TEXT,
     category        TEXT,
     posted_at       TEXT,
+    posted_ts       TEXT,            -- normalized YYYY-MM-DD for sort/filter
     source_platform TEXT,
     job_id          TEXT,
     country         TEXT,
@@ -132,7 +134,7 @@ def connect():
 
 # Columns added after the initial schema, for self-migration of existing DBs.
 _MIGRATIONS = {"company_category": "TEXT", "phd_required": "INTEGER",
-               "relevance": "INTEGER", "relevance_reason": "TEXT"}
+               "relevance": "INTEGER", "relevance_reason": "TEXT", "posted_ts": "TEXT"}
 
 
 def init_db() -> None:
@@ -362,7 +364,7 @@ def mark_notified(keys: list[str]) -> None:
 def query_roles(*, username=None, status="active", company=None, category=None,
                 source=None, seniority=None, min_impact=None, min_relevance=None,
                 max_yoe=None, yoe_known=False, hide_phd=False, has_comp=False,
-                exclude_companies=None, tab="new", search=None,
+                exclude_companies=None, tab="new", posted_within=None, search=None,
                 sort="first_seen", order="desc", limit=200, offset=0) -> list[dict]:
     init_db()
     where = ["r.status = ?"]
@@ -397,15 +399,21 @@ def query_roles(*, username=None, status="active", company=None, category=None,
         where.append("a.status = 'applied'")
     else:  # "new": not yet in any pipeline status
         where.append("a.status IS NULL")
+    if posted_within:
+        # freshness = posted date, falling back to when Kraven first saw it
+        thresh = (date.today() - timedelta(days=int(posted_within))).isoformat()
+        where.append("COALESCE(r.posted_ts, substr(r.first_seen,1,10)) >= ?")
+        params.append(thresh)
     if has_comp:
         where.append("comp_max IS NOT NULL")
     if search:
         where.append("(role_title LIKE ? OR company LIKE ? OR overview LIKE ?)")
         params += [f"%{search}%"] * 3
     allowed_sort = {"first_seen", "comp_max", "impact", "company", "role_title",
-                    "yoe_min", "relevance", "status_since"}
+                    "yoe_min", "relevance", "status_since", "posted"}
     sort = sort if sort in allowed_sort else "first_seen"
-    sort_col = {"relevance": "s.relevance", "status_since": "a.updated_at"}.get(sort, "r." + sort)
+    sort_col = {"relevance": "s.relevance", "status_since": "a.updated_at",
+                "posted": "COALESCE(r.posted_ts, substr(r.first_seen,1,10))"}.get(sort, "r." + sort)
     order = "DESC" if str(order).lower() != "asc" else "ASC"
     q = (f"SELECT r.*, s.relevance AS u_rel, s.reason AS u_reason, "
          f"a.status AS u_status, a.updated_at AS u_since "

@@ -26,6 +26,24 @@ def dedupe_key(record: dict) -> str:
     return f"{record['company']}:{record['source_platform']}:{record['job_id']}"
 
 
+def parse_posted(s: str | None) -> str | None:
+    """Normalize a posted_at value (ISO, 'March 27, 2026', '2026-05-29', etc.)
+    to a YYYY-MM-DD string for reliable sort/filter. None if unparseable."""
+    if not s:
+        return None
+    s = str(s).strip()
+    try:
+        return datetime.fromisoformat(s.replace("Z", "+00:00")).date().isoformat()
+    except ValueError:
+        pass
+    for fmt in ("%B %d, %Y", "%b %d, %Y", "%Y-%m-%d", "%m/%d/%Y", "%d %B %Y"):
+        try:
+            return datetime.strptime(s, fmt).date().isoformat()
+        except ValueError:
+            continue
+    return None
+
+
 # --- Per-platform normalizers ------------------------------------------------
 def normalize_greenhouse(company: str, job: dict) -> dict:
     loc = (job.get("location") or {}).get("name") or ""

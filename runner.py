@@ -28,7 +28,8 @@ import config
 import db
 import dedupe
 import slack
-from normalize import dedupe_key, is_stale_or_intern, is_us_location, title_matches
+from normalize import (dedupe_key, is_stale_or_intern, is_us_location,
+                       parse_posted, title_matches)
 from pollers import (amazon, ashby, greenhouse, lever, smartrecruiters, workable,
                      workday)
 
@@ -214,6 +215,7 @@ def main() -> None:
     if not args.dry_run:
         for rec in by_key.values():
             rec["company_category"] = company_category.get(rec["company"], "")
+            rec["posted_ts"] = parse_posted(rec.get("posted_at"))
         new_in_db = db.upsert_roles(list(by_key.values()), now=now)
         closed = db.mark_closed(current_keys, now=now)
         log.info("DB: %d roles upserted (%d new), %d marked closed",

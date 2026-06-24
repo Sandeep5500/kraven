@@ -143,6 +143,12 @@
           <option value="1">≤ 1 yr</option><option value="2">≤ 2 yrs</option>
           <option value="3" selected>≤ 3 yrs</option><option value="4">≤ 4 yrs</option>
         </select></div>
+      <div class="prow"><label>Posted within</label>
+        <select id="posted_within" title="Posted (or first seen) within N days">
+          <option value="">Any time</option>
+          <option value="3">3 days</option><option value="7">7 days</option>
+          <option value="14">14 days</option><option value="30">30 days</option>
+        </select></div>
       <div class="prow"><label>Min fit</label>
         <select id="min_relevance" title="Minimum resume-fit score (0-100)">
           <option value="">Any fit</option><option value="40">≥ 40</option>
@@ -195,7 +201,7 @@
       <th data-sort="yoe_min" title="Min years of experience required">YOE</th>
       <th data-sort="relevance" class="sorted" title="Fit vs your resume (0-100)">Fit</th>
       <th data-sort="impact">Impact</th>
-      <th>Posted</th>
+      <th data-sort="posted" title="Posted (or first-seen) date">Posted</th>
       <th>Tags</th>
       <th data-sort="first_seen" id="th-seen">Seen</th>
       <th></th>
@@ -253,7 +259,7 @@ function renderExcluded(){
 }
 function activeCount(){
   let n=excluded.length;
-  for (const id of ["search","company","category","seniority","min_impact","min_relevance"]) if($("#"+id).value) n++;
+  for (const id of ["search","company","category","seniority","min_impact","min_relevance","posted_within"]) if($("#"+id).value) n++;
   if ($("#max_yoe").value!=="3") n++;          // non-default
   if (!$("#hide_phd").checked) n++;            // non-default (default on)
   for (const id of ["yoe_known","has_comp","closed"]) if($("#"+id).checked) n++;
@@ -271,7 +277,7 @@ function esc(s){ return (s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">
 async function load() {
   const p = new URLSearchParams();
   p.set("status", $("#closed").checked ? "closed" : "active");
-  for (const id of ["search","company","category","seniority","min_impact","min_relevance","max_yoe"]) {
+  for (const id of ["search","company","category","seniority","min_impact","min_relevance","max_yoe","posted_within"]) {
     const v = $("#"+id).value; if (v) p.set(id, v);
   }
   if ($("#has_comp").checked) p.set("has_comp","true");
@@ -328,7 +334,7 @@ document.querySelectorAll("th[data-sort]").forEach(th=>th.onclick=()=>{
   th.classList.add("sorted"); if(order==="asc") th.classList.add("asc");
   load();
 });
-["search","company","category","seniority","min_impact","min_relevance","max_yoe","has_comp","yoe_known","hide_phd","closed"].forEach(id=>{
+["search","company","category","seniority","min_impact","min_relevance","max_yoe","posted_within","has_comp","yoe_known","hide_phd","closed"].forEach(id=>{
   const el=$("#"+id); el.addEventListener(el.type==="checkbox"||el.tagName==="SELECT"?"change":"input", load);
 });
 $("#filters-btn").onclick=(e)=>{ e.stopPropagation(); $("#panel").classList.toggle("open"); };

@@ -72,6 +72,7 @@ def api_roles(
     has_comp: bool = False,
     exclude_companies: str | None = None,
     tab: str = "new",
+    posted_within: int | None = None,
     search: str | None = None,
     sort: str = "first_seen",
     order: str = "desc",
@@ -84,7 +85,7 @@ def api_roles(
         seniority=seniority, min_impact=min_impact, min_relevance=min_relevance,
         max_yoe=max_yoe, yoe_known=yoe_known, hide_phd=hide_phd, has_comp=has_comp,
         exclude_companies=[c for c in (exclude_companies or "").split(",") if c],
-        tab=tab,
+        tab=tab, posted_within=posted_within,
         search=search, sort=sort, order=order, limit=limit, offset=offset,
     )
     return {"count": len(rows), "roles": rows}
