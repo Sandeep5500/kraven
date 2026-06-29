@@ -154,6 +154,17 @@ def api_counts(user: str = Depends(_auth)):
     return db.status_counts(user)
 
 
+class BulkStatus(BaseModel):
+    keys: list[str]
+    status: str = "waiting"
+
+
+@app.post("/api/status/bulk")
+def bulk_status(req: BulkStatus, user: str = Depends(_auth)):
+    n = db.set_status_bulk(user, req.keys, req.status, now=_now())
+    return {"ok": True, "n": n}
+
+
 @app.get("/api/role/{key}")
 def role_detail(key: str, _=Depends(_auth)):
     role = db.get_role(key)

@@ -53,6 +53,10 @@
   .tcount { background:#1d2230; border-radius:9px; padding:0 6px; font-size:11px; margin-left:3px; }
   .stale { color:#ff7b72; font-size:11px; margin-left:5px; font-weight:700; }
   .stale:empty { display:none; }
+  #bulkbar { display:none; gap:9px; align-items:center; padding:9px 20px;
+             background:#15212e; border-bottom:1px solid var(--line); }
+  #bulkbar.show { display:flex; }
+  #bulkn { font-weight:700; }
   .statsel { font-size:11px; padding:2px 4px; }
   .age { font-size:11px; font-weight:700; margin-top:3px; }
   .wrap { padding:0 12px; }
@@ -185,15 +189,24 @@
   <button class="tab" data-tab="waiting">⏳ Waiting <span class="tcount" id="cnt-waiting"></span><span class="stale" id="stale-badge"></span></button>
   <button class="tab" data-tab="applied">✓ Applied <span class="tcount" id="cnt-applied"></span></button>
 </div>
+<div id="bulkbar">
+  <span id="bulkn"></span>
+  <span style="color:var(--mut)">move to</span>
+  <button data-bulk="waiting">⏳ Waiting</button>
+  <button data-bulk="applied">✓ Applied</button>
+  <button data-bulk="new">↩ New</button>
+  <button id="bulkclear">Clear selection</button>
+</div>
 <div class="wrap">
   <table>
     <colgroup>
-      <col style="width:26%"><col style="width:8%"><col style="width:11%">
+      <col style="width:3%"><col style="width:24%"><col style="width:8%"><col style="width:10%">
       <col style="width:8%"><col style="width:5%"><col style="width:6%">
-      <col style="width:5%"><col style="width:7%"><col style="width:11%">
-      <col style="width:4%"><col style="width:9%">
+      <col style="width:5%"><col style="width:7%"><col style="width:9%">
+      <col style="width:4%"><col style="width:11%">
     </colgroup>
     <thead><tr>
+      <th><input type="checkbox" id="selall" title="Select all shown"/></th>
       <th data-sort="role_title">Role</th>
       <th data-sort="company">Company</th>
       <th>Location</th>
@@ -305,6 +318,7 @@ async function load() {
     const phd = r.phd_required ? ` <span class="tag" style="color:#ff7b72;border-color:#5a2a2a" title="PhD required">PhD</span>`
               : (r.phd_mentioned ? ` <span class="tag" style="color:#e3b341;border-color:#5a4a1e" title="PhD or equivalent experience">phd?</span>` : "");
     tr.innerHTML = `
+      <td><input type="checkbox" class="selbox" data-key="${esc(r.key)}"></td>
       <td class="title"><a href="${esc(r.url)}" target="_blank">${esc(r.role_title)}</a>${phd}
           ${r.overview?`<div class="ov">${esc(r.overview)}</div>`:""}</td>
       <td class="co">${esc(r.company)}</td>
@@ -321,6 +335,7 @@ async function load() {
           <select class="statsel" data-key="${esc(r.key)}" title="Move to a pipeline stage">${stOpts}</select></td>`;
     tb.append(tr);
   }
+  selected.clear(); if($("#selall")) $("#selall").checked=false; refreshBulk();
   const s = await (await fetch("/api/stats")).json();
   $("#stats").textContent = `${data.count} shown · ${s.active} active · ${s.enriched} enriched · ${s.total} total`;
   $("#updated").textContent = s.last_updated ? `· updated ${since(s.last_updated)}` : "";
@@ -419,6 +434,32 @@ document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>{
   const activeTh = currentTab==="new" ? document.querySelector('th[data-sort="relevance"]') : seenTh;
   activeTh.classList.add("sorted"); if(order==="asc") activeTh.classList.add("asc");
   load();
+});
+
+// --- bulk selection ---
+let selected = new Set();
+function refreshBulk(){
+  $("#bulkn").textContent = `${selected.size} selected`;
+  $("#bulkbar").classList.toggle("show", selected.size>0);
+  const boxes=[...document.querySelectorAll(".selbox")];
+  if($("#selall")) $("#selall").checked = boxes.length>0 && boxes.every(b=>b.checked);
+}
+$("#rows").addEventListener("change", e=>{
+  const b=e.target.closest(".selbox"); if(!b) return;
+  b.checked ? selected.add(b.dataset.key) : selected.delete(b.dataset.key);
+  refreshBulk();
+});
+$("#selall").onclick=()=>{
+  const on=$("#selall").checked;
+  document.querySelectorAll(".selbox").forEach(b=>{ b.checked=on; on?selected.add(b.dataset.key):selected.delete(b.dataset.key); });
+  refreshBulk();
+};
+$("#bulkclear").onclick=()=>{ selected.clear(); document.querySelectorAll(".selbox").forEach(b=>b.checked=false); refreshBulk(); };
+document.querySelectorAll("#bulkbar [data-bulk]").forEach(btn=>btn.onclick=async()=>{
+  if(!selected.size) return;
+  await fetch("/api/status/bulk",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({keys:[...selected], status:btn.dataset.bulk})});
+  load();   // re-render: moved rows leave the tab; selection resets
 });
 
 loadFacets().then(load);

@@ -286,6 +286,21 @@ def set_status(username: str, key: str, status: str, *, now: str) -> None:
                 (username, key, status, now))
 
 
+def set_status_bulk(username: str, keys: list[str], status: str, *, now: str) -> int:
+    init_db()
+    with connect() as conn:
+        for key in keys:
+            if status == "new" or status not in STATUSES:
+                conn.execute("DELETE FROM user_status WHERE username=? AND role_key=?",
+                             (username, key))
+            else:
+                conn.execute(
+                    "INSERT INTO user_status (username, role_key, status, updated_at) VALUES (?,?,?,?) "
+                    "ON CONFLICT(username, role_key) DO UPDATE SET status=excluded.status, "
+                    "updated_at=excluded.updated_at", (username, key, status, now))
+    return len(keys)
+
+
 def status_counts(username: str) -> dict:
     init_db()
     with connect() as conn:
