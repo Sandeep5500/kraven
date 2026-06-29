@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS user_scores (
 );
 CREATE INDEX IF NOT EXISTS idx_uscores_user ON user_scores(username);
 
--- Per-user pipeline status. No row = "new"; otherwise 'waiting' or 'applied'.
+-- Per-user pipeline status. No row = "new"; otherwise 'applied-noref' or 'applied-ref'.
 CREATE TABLE IF NOT EXISTS user_status (
     username   TEXT,
     role_key   TEXT,
@@ -151,6 +151,10 @@ def init_db() -> None:
             conn.execute("INSERT OR IGNORE INTO user_status (username, role_key, status, updated_at) "
                          "SELECT username, role_key, 'applied', applied_at FROM user_applied")
             conn.execute("DROP TABLE user_applied")
+        # Old 3-stage pipeline (new/waiting/applied) -> apply-first (applied-noref/applied-ref).
+        # Anything previously parked as 'waiting' or 'applied' becomes 'applied-noref'.
+        conn.execute("UPDATE user_status SET status='applied-noref' "
+                     "WHERE status IN ('waiting', 'applied')")
         existing = {r[1] for r in conn.execute("PRAGMA table_info(roles)").fetchall()}
         for col, typ in _MIGRATIONS.items():
             if col not in existing:
@@ -268,11 +272,11 @@ def delete_user(username: str) -> None:
             conn.execute(f"DELETE FROM {t} WHERE username=?", (username,))
 
 
-STATUSES = ("new", "waiting", "applied")
+STATUSES = ("new", "applied-noref", "applied-ref")
 
 
 def set_status(username: str, key: str, status: str, *, now: str) -> None:
-    """status: 'new' (clears the row), 'waiting', or 'applied'."""
+    """status: 'new' (clears the row), 'applied-noref', or 'applied-ref'."""
     init_db()
     with connect() as conn:
         if status == "new" or status not in STATUSES:
@@ -301,6 +305,24 @@ def set_status_bulk(username: str, keys: list[str], status: str, *, now: str) ->
     return len(keys)
 
 
+def set_status_by_company(username: str, company: str, status: str, *, now: str) -> int:
+    """Move every active role at `company` to `status` in one shot. Returns count moved."""
+    init_db()
+    with connect() as conn:
+        keys = [r[0] for r in conn.execute(
+            "SELECT key FROM roles WHERE company=? AND status='active'", (company,)).fetchall()]
+        for key in keys:
+            if status == "new" or status not in STATUSES:
+                conn.execute("DELETE FROM user_status WHERE username=? AND role_key=?",
+                             (username, key))
+            else:
+                conn.execute(
+                    "INSERT INTO user_status (username, role_key, status, updated_at) VALUES (?,?,?,?) "
+                    "ON CONFLICT(username, role_key) DO UPDATE SET status=excluded.status, "
+                    "updated_at=excluded.updated_at", (username, key, status, now))
+    return len(keys)
+
+
 def status_counts(username: str) -> dict:
     init_db()
     with connect() as conn:
@@ -308,13 +330,9 @@ def status_counts(username: str) -> dict:
         rows = dict(conn.execute(
             "SELECT us.status, COUNT(*) FROM user_status us JOIN roles r ON r.key=us.role_key "
             "WHERE us.username=? AND r.status='active' GROUP BY us.status", (username,)).fetchall())
-        waiting, applied = rows.get("waiting", 0), rows.get("applied", 0)
-        stale = conn.execute(
-            "SELECT COUNT(*) FROM user_status us JOIN roles r ON r.key=us.role_key "
-            "WHERE us.username=? AND r.status='active' AND us.status='waiting' "
-            "AND julianday('now') - julianday(us.updated_at) > 5", (username,)).fetchone()[0]
-        return {"new": active - waiting - applied, "waiting": waiting,
-                "applied": applied, "waiting_stale": stale}
+        noref, ref = rows.get("applied-noref", 0), rows.get("applied-ref", 0)
+        return {"new": active - noref - ref,
+                "applied-noref": noref, "applied-ref": ref}
 
 
 # --- relevance scoring (per user, resume-dependent) --------------------------
@@ -380,7 +398,8 @@ def query_roles(*, username=None, status="active", company=None, category=None,
                 source=None, seniority=None, min_impact=None, min_relevance=None,
                 max_yoe=None, yoe_known=False, hide_phd=False, has_comp=False,
                 exclude_companies=None, tab="new", posted_within=None, search=None,
-                sort="first_seen", order="desc", limit=200, offset=0) -> list[dict]:
+                sort="first_seen", order="desc", limit=200, offset=0,
+                diversify=False) -> list[dict]:
     init_db()
     where = ["r.status = ?"]
     params: list = [username, username, status]   # 2 JOINs (scores, applied) then status
@@ -408,10 +427,8 @@ def query_roles(*, username=None, status="active", company=None, category=None,
     if exclude_companies:
         ph = ",".join("?" * len(exclude_companies))
         where.append(f"company NOT IN ({ph})"); params += list(exclude_companies)
-    if tab == "waiting":
-        where.append("a.status = 'waiting'")
-    elif tab == "applied":
-        where.append("a.status = 'applied'")
+    if tab in ("applied-noref", "applied-ref"):
+        where.append("a.status = ?"); params.append(tab)
     else:  # "new": not yet in any pipeline status
         where.append("a.status IS NULL")
     if posted_within:
@@ -430,6 +447,13 @@ def query_roles(*, username=None, status="active", company=None, category=None,
     sort_col = {"relevance": "s.relevance", "status_since": "a.updated_at",
                 "posted": "COALESCE(r.posted_ts, substr(r.first_seen,1,10))"}.get(sort, "r." + sort)
     order = "DESC" if str(order).lower() != "asc" else "ASC"
+    if diversify:
+        # "Suggested" set: rank by fit, then keep the best-fit role per company so a
+        # single company's batch can't dominate. Fetch wide, dedupe in Python below.
+        sort_col, order = "s.relevance", "DESC"
+        sql_limit, sql_offset = 3000, 0
+    else:
+        sql_limit, sql_offset = int(limit), int(offset)
     q = (f"SELECT r.*, s.relevance AS u_rel, s.reason AS u_reason, "
          f"a.status AS u_status, a.updated_at AS u_since "
          f"FROM roles r "
@@ -437,9 +461,18 @@ def query_roles(*, username=None, status="active", company=None, category=None,
          f"LEFT JOIN user_status a ON a.role_key=r.key AND a.username=? "
          f"WHERE {' AND '.join(where)} "
          f"ORDER BY {sort_col} {order} NULLS LAST LIMIT ? OFFSET ?")
-    params += [int(limit), int(offset)]
+    params += [sql_limit, sql_offset]
     with connect() as conn:
         rows = [dict(r) for r in conn.execute(q, params).fetchall()]
+    if diversify:
+        seen_co, deduped = set(), []
+        for r in rows:                    # rows already ranked by fit desc
+            if r["company"] in seen_co:
+                continue
+            seen_co.add(r["company"]); deduped.append(r)
+            if len(deduped) >= int(limit):
+                break
+        rows = deduped
     for r in rows:
         r["relevance"] = r.pop("u_rel", None)             # per-user score
         r["relevance_reason"] = r.pop("u_reason", None)

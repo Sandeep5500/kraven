@@ -51,13 +51,19 @@
   .tab:hover { color:var(--txt); }
   .tab.active { color:var(--txt); border-bottom-color:var(--orange); font-weight:600; }
   .tcount { background:#1d2230; border-radius:9px; padding:0 6px; font-size:11px; margin-left:3px; }
-  .stale { color:#ff7b72; font-size:11px; margin-left:5px; font-weight:700; }
-  .stale:empty { display:none; }
   #bulkbar { display:none; gap:9px; align-items:center; padding:9px 20px;
              background:#15212e; border-bottom:1px solid var(--line); }
   #bulkbar.show { display:flex; }
   #bulkn { font-weight:700; }
-  .statsel { font-size:11px; padding:2px 4px; }
+  #bulkbar [data-bulk] { font-size:12px; padding:5px 11px; border-radius:14px; font-weight:600; }
+  /* pipeline status pills — colour-coded by stage */
+  .statsel, .cosel { font-size:11px; padding:3px 7px; border-radius:13px; font-weight:600;
+                     border:1px solid var(--line); cursor:pointer; }
+  .statsel:hover, .cosel:hover { border-color:var(--orange); }
+  .statsel.s-new { color:var(--mut); }
+  .statsel.s-applied-noref { color:#58a6ff; border-color:#1f3a5f; background:#0f1c2e; }
+  .statsel.s-applied-ref { color:#3fb950; border-color:#1f3f2a; background:#0f1f15; }
+  .cosel { color:var(--orange); border-style:dashed; }
   .age { font-size:11px; font-weight:700; margin-top:3px; }
   .wrap { padding:0 12px; }
   table { width:100%; border-collapse:collapse; table-layout:fixed; }
@@ -79,6 +85,21 @@
   td.actions a { display:inline-block; }
   .kit { color:var(--orange); text-decoration:none; cursor:pointer; }
   .kit:hover { color:#ffa46a; }
+  #suggested { padding:14px 20px 4px; }
+  .sg-head { font-size:13px; font-weight:700; color:var(--orange); margin-bottom:9px; }
+  .sg-sub { font-weight:400; color:var(--mut); }
+  .sg-strip { display:flex; gap:10px; overflow-x:auto; padding-bottom:8px; scrollbar-width:thin; }
+  .sg-card { flex:0 0 210px; background:var(--panel); border:1px solid var(--line); border-radius:10px;
+             padding:10px 12px; display:flex; flex-direction:column; gap:5px; }
+  .sg-card:hover { border-color:var(--orange-dim); }
+  .sg-co { font-size:11px; color:var(--mut); text-transform:uppercase; letter-spacing:.04em; display:flex; justify-content:space-between; }
+  .sg-role { font-size:13px; font-weight:600; line-height:1.3; }
+  .sg-role a { color:var(--txt); text-decoration:none; }
+  .sg-role a:hover { color:var(--orange); }
+  .sg-meta { font-size:11px; color:var(--mut); margin-top:1px; }
+  .sg-act { display:flex; gap:8px; margin-top:5px; }
+  .sg-act a { font-size:11px; cursor:pointer; text-decoration:none; }
+  .sg-act .apply { color:var(--acc); }
   .appl { color:var(--mut); font-size:11px; display:flex; gap:4px; align-items:center; cursor:pointer; }
   button:hover { border-color:var(--orange); }
   /* apply-kit modal */
@@ -185,17 +206,21 @@
   <span id="active-chips" class="chips"></span>
 </div>
 <div class="tabs">
-  <button class="tab active" data-tab="new">New <span class="tcount" id="cnt-new"></span></button>
-  <button class="tab" data-tab="waiting">⏳ Waiting <span class="tcount" id="cnt-waiting"></span><span class="stale" id="stale-badge"></span></button>
-  <button class="tab" data-tab="applied">✓ Applied <span class="tcount" id="cnt-applied"></span></button>
+  <button class="tab active" data-tab="new">📥 New <span class="tcount" id="cnt-new"></span></button>
+  <button class="tab" data-tab="applied-noref">📤 Applied · no ref <span class="tcount" id="cnt-applied-noref"></span></button>
+  <button class="tab" data-tab="applied-ref">🤝 Applied · referred <span class="tcount" id="cnt-applied-ref"></span></button>
 </div>
 <div id="bulkbar">
   <span id="bulkn"></span>
   <span style="color:var(--mut)">move to</span>
-  <button data-bulk="waiting">⏳ Waiting</button>
-  <button data-bulk="applied">✓ Applied</button>
+  <button data-bulk="applied-noref">📤 Applied · no ref</button>
+  <button data-bulk="applied-ref">🤝 Applied · referred</button>
   <button data-bulk="new">↩ New</button>
   <button id="bulkclear">Clear selection</button>
+</div>
+<div id="suggested" style="display:none">
+  <div class="sg-head">✦ Suggested for you <span class="sg-sub">— top picks, one per company so no single employer crowds the list</span></div>
+  <div class="sg-strip" id="sg-strip"></div>
 </div>
 <div class="wrap">
   <table>
@@ -241,6 +266,9 @@
 </div>
 <script>
 const $ = s => document.querySelector(s);
+// Apply-first pipeline stages. No row = "new"; applied immediately = no-ref; referral landed = ref.
+const STATUSES = ["new", "applied-noref", "applied-ref"];
+const STATUS_LABEL = {"new":"New", "applied-noref":"Applied", "applied-ref":"Referred"};
 let sort = "relevance", order = "desc";
 
 let excluded = [];
@@ -264,8 +292,9 @@ function postedDisp(s){
 function ageColor(d){ const t=Math.max(0,Math.min(1,d/5)); return `hsl(${Math.round(120*(1-t))},65%,55%)`; }  // 1d green → 5d red
 let currentTab="new";
 async function loadCounts(){ try{ const c=await (await fetch("/api/counts")).json();
-  $("#cnt-new").textContent=c.new; $("#cnt-waiting").textContent=c.waiting; $("#cnt-applied").textContent=c.applied;
-  $("#stale-badge").textContent = c.waiting_stale ? `⚠ ${c.waiting_stale} stale` : ""; }catch(e){} }
+  $("#cnt-new").textContent=c.new;
+  $("#cnt-applied-noref").textContent=c["applied-noref"];
+  $("#cnt-applied-ref").textContent=c["applied-ref"]; }catch(e){} }
 function renderExcluded(){
   $("#excl-chips").innerHTML = excluded.map(c=>`<span class="chip">${esc(c)} <b data-x="${esc(c)}">×</b></span>`).join("");
   document.querySelectorAll("#excl-chips b").forEach(b=>b.onclick=()=>{ excluded=excluded.filter(x=>x!==b.dataset.x); renderExcluded(); load(); });
@@ -311,7 +340,7 @@ async function load() {
       : `<span class="yoe ${r.yoe_min<=4?'yoe-ok':'yoe-high'}">${r.yoe_min}</span>`;
     const fit = r.relevance==null ? '<span class="muted">—</span>'
       : `<span class="fit" title="${esc(r.relevance_reason||'')}" style="color:${r.relevance>=70?'#3fb950':r.relevance>=40?'#d29922':'#9aa3b2'}">${r.relevance}</span>`;
-    const stOpts = ["new","waiting","applied"].map(s=>`<option value="${s}" ${r.status===s?"selected":""}>${s[0].toUpperCase()+s.slice(1)}</option>`).join("");
+    const stOpts = STATUSES.map(s=>`<option value="${s}" ${r.status===s?"selected":""}>${STATUS_LABEL[s]}</option>`).join("");
     const seen = (currentTab!=="new" && r.status_since)
       ? `<span class="age" style="color:${ageColor(daysSince(r.status_since))}" title="in ${currentTab} for ${since(r.status_since)}">⏱ ${since(r.status_since)}</span>`
       : `<span class="muted">${ago(r.first_seen)}</span>`;
@@ -321,7 +350,13 @@ async function load() {
       <td><input type="checkbox" class="selbox" data-key="${esc(r.key)}"></td>
       <td class="title"><a href="${esc(r.url)}" target="_blank">${esc(r.role_title)}</a>${phd}
           ${r.overview?`<div class="ov">${esc(r.overview)}</div>`:""}</td>
-      <td class="co">${esc(r.company)}</td>
+      <td class="co">${esc(r.company)}
+          <select class="cosel" data-co="${esc(r.company)}" title="Move ALL ${esc(r.company)} roles at once">
+            <option value="">↦ all ${esc(r.company)}…</option>
+            <option value="applied-noref">📤 Applied · no ref</option>
+            <option value="applied-ref">🤝 Applied · referred</option>
+            <option value="new">↩ New</option>
+          </select></td>
       <td class="muted">${esc(r.location)}</td>
       <td class="comp">${fmtComp(r)}</td>
       <td>${yoe}</td>
@@ -332,7 +367,7 @@ async function load() {
       <td>${seen}</td>
       <td class="actions"><a class="apply" href="${esc(r.url)}" target="_blank">Apply ↗</a>
           <a class="kit" data-key="${esc(r.key)}" title="Generate outreach + essays">✍️ Kit</a>
-          <select class="statsel" data-key="${esc(r.key)}" title="Move to a pipeline stage">${stOpts}</select></td>`;
+          <select class="statsel s-${r.status||'new'}" data-key="${esc(r.key)}" title="Move to a pipeline stage">${stOpts}</select></td>`;
     tb.append(tr);
   }
   selected.clear(); if($("#selall")) $("#selall").checked=false; refreshBulk();
@@ -340,6 +375,45 @@ async function load() {
   $("#stats").textContent = `${data.count} shown · ${s.active} active · ${s.enriched} enriched · ${s.total} total`;
   $("#updated").textContent = s.last_updated ? `· updated ${since(s.last_updated)}` : "";
   loadCounts();
+  renderSuggested();
+}
+
+function filterParams() {
+  const p = new URLSearchParams();
+  p.set("status", $("#closed").checked ? "closed" : "active");
+  for (const id of ["search","company","category","seniority","min_impact","min_relevance","max_yoe","posted_within"]) {
+    const v = $("#"+id).value; if (v) p.set(id, v);
+  }
+  if ($("#has_comp").checked) p.set("has_comp","true");
+  if ($("#yoe_known").checked) p.set("yoe_known","true");
+  if ($("#hide_phd").checked) p.set("hide_phd","true");
+  if (excluded.length) p.set("exclude_companies", excluded.join(","));
+  return p;
+}
+
+// Diverse "Suggested" strip: best-fit role per company, so no single employer
+// crowds the top. Only on the New tab (a fresh-applications shortlist).
+async function renderSuggested() {
+  const box = $("#suggested");
+  if (currentTab !== "new") { box.style.display = "none"; return; }
+  const p = filterParams();
+  p.set("tab","new"); p.set("diversify","true"); p.set("limit","20");
+  const data = await (await fetch("/api/roles?"+p)).json();
+  if (!data.roles.length) { box.style.display = "none"; return; }
+  const strip = $("#sg-strip"); strip.innerHTML = "";
+  for (const r of data.roles) {
+    const fit = r.relevance==null ? "" :
+      `<span class="fit" style="color:${r.relevance>=70?'#3fb950':r.relevance>=40?'#d29922':'#9aa3b2'}">${r.relevance} fit</span>`;
+    const c = document.createElement("div"); c.className = "sg-card";
+    c.innerHTML = `
+      <div class="sg-co"><span>${esc(r.company)}</span>${fit}</div>
+      <div class="sg-role"><a href="${esc(r.url)}" target="_blank">${esc(r.role_title)}</a></div>
+      <div class="sg-meta">${fmtComp(r)} · ${r.yoe_min==null?"YOE n/a":r.yoe_min+" yrs"}${r.location?" · "+esc(r.location):""}</div>
+      <div class="sg-act"><a class="apply" href="${esc(r.url)}" target="_blank">Apply ↗</a>
+        <a class="kit" data-key="${esc(r.key)}">✍️ Kit</a></div>`;
+    strip.append(c);
+  }
+  box.style.display = "block";
 }
 
 document.querySelectorAll("th[data-sort]").forEach(th=>th.onclick=()=>{
@@ -415,21 +489,31 @@ $("#kregen").onclick=()=>genKit(true);
 $("#overlay").onclick=(e)=>{ if(e.target.id==="overlay") closeKit(); };
 document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeKit(); });
 $("#rows").addEventListener("click",e=>{ const a=e.target.closest(".kit"); if(a){ e.preventDefault(); openKit(a.dataset.key); } });
+$("#sg-strip").addEventListener("click",e=>{ const a=e.target.closest(".kit"); if(a){ e.preventDefault(); openKit(a.dataset.key); } });
 $("#rows").addEventListener("change", async e=>{
-  const s=e.target.closest(".statsel"); if(!s) return;
-  await fetch(`/api/role/${encodeURIComponent(s.dataset.key)}/status?status=${s.value}`,{method:"POST"});
-  load();   // re-query: role moves to its new tab
+  const s=e.target.closest(".statsel");
+  if(s){
+    await fetch(`/api/role/${encodeURIComponent(s.dataset.key)}/status?status=${s.value}`,{method:"POST"});
+    return load();   // re-query: role moves to its new tab
+  }
+  const co=e.target.closest(".cosel");
+  if(co && co.value){
+    const company=co.dataset.co, status=co.value;
+    co.value="";   // reset placeholder
+    if(!confirm(`Move ALL active ${company} roles to "${STATUS_LABEL[status]}"?`)) return;
+    await fetch(`/api/status/company?company=${encodeURIComponent(company)}&status=${status}`,{method:"POST"});
+    load();
+  }
 });
 document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>{
   document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
   t.classList.add("active"); currentTab=t.dataset.tab;
   const seenTh=$("#th-seen");
-  if (currentTab==="waiting"){ sort="status_since"; order="asc"; }     // oldest (most overdue) first
-  else if (currentTab==="applied"){ sort="status_since"; order="desc"; }
-  else { sort="relevance"; order="desc"; }
-  // adaptive "Seen" header: sorts/labels by status age in waiting/applied
+  if (currentTab==="new"){ sort="relevance"; order="desc"; }
+  else { sort="status_since"; order="desc"; }     // most recently moved first
+  // adaptive "Seen" header: sorts/labels by status age in the applied tabs
   seenTh.dataset.sort = currentTab==="new" ? "first_seen" : "status_since";
-  seenTh.textContent  = currentTab==="waiting" ? "Waiting" : currentTab==="applied" ? "Applied" : "Seen";
+  seenTh.textContent  = currentTab==="new" ? "Seen" : "Moved";
   document.querySelectorAll("th").forEach(h=>h.classList.remove("sorted","asc"));
   const activeTh = currentTab==="new" ? document.querySelector('th[data-sort="relevance"]') : seenTh;
   activeTh.classList.add("sorted"); if(order==="asc") activeTh.classList.add("asc");

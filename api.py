@@ -78,6 +78,7 @@ def api_roles(
     order: str = "desc",
     limit: int = Query(200, le=1000),
     offset: int = 0,
+    diversify: bool = False,
 ):
     rows = db.query_roles(
         username=user,
@@ -87,6 +88,7 @@ def api_roles(
         exclude_companies=[c for c in (exclude_companies or "").split(",") if c],
         tab=tab, posted_within=posted_within,
         search=search, sort=sort, order=order, limit=limit, offset=offset,
+        diversify=diversify,
     )
     return {"count": len(rows), "roles": rows}
 
@@ -156,12 +158,19 @@ def api_counts(user: str = Depends(_auth)):
 
 class BulkStatus(BaseModel):
     keys: list[str]
-    status: str = "waiting"
+    status: str = "applied-noref"
 
 
 @app.post("/api/status/bulk")
 def bulk_status(req: BulkStatus, user: str = Depends(_auth)):
     n = db.set_status_bulk(user, req.keys, req.status, now=_now())
+    return {"ok": True, "n": n}
+
+
+@app.post("/api/status/company")
+def company_status(company: str, status: str = "applied-noref", user: str = Depends(_auth)):
+    """Move every active role at one company to `status` in a single click."""
+    n = db.set_status_by_company(user, company, status, now=_now())
     return {"ok": True, "n": n}
 
 
