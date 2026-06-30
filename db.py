@@ -448,11 +448,10 @@ def query_roles(*, username=None, status="active", company=None, category=None,
                 "posted": "COALESCE(r.posted_ts, substr(r.first_seen,1,10))"}.get(sort, "r." + sort)
     order = "DESC" if str(order).lower() != "asc" else "ASC"
     if diversify:
-        # "Suggested" set: rank by fit, then keep the best-fit role per company so a
-        # single company's batch can't dominate. Fetch wide, dedupe in Python below.
-        sort_col, order = "s.relevance", "DESC"
-    # Tier filtering (Big Tech / Mid-size / Startups) is derived in Python from
-    # company+category, so fetch wide and slice after filtering.
+        # Rank by fit; use impact as fallback so unscored roles still surface.
+        sort_col = "COALESCE(s.relevance, r.impact * 15, 0)"
+        order = "DESC"
+    # Tier/diversify filtering is done in Python — fetch wide, slice after.
     if diversify or tier:
         sql_limit, sql_offset = 3000, 0
     else:
@@ -463,17 +462,20 @@ def query_roles(*, username=None, status="active", company=None, category=None,
          f"LEFT JOIN user_scores s ON s.role_key=r.key AND s.username=? "
          f"LEFT JOIN user_status a ON a.role_key=r.key AND a.username=? "
          f"WHERE {' AND '.join(where)} "
-         f"ORDER BY {sort_col} {order} NULLS LAST LIMIT ? OFFSET ?")
+         f"ORDER BY {sort_col} {order} LIMIT ? OFFSET ?")
     params += [sql_limit, sql_offset]
     with connect() as conn:
         rows = [dict(r) for r in conn.execute(q, params).fetchall()]
     if diversify:
+        # Dedup to one-per-company across the full result set, then tier-filter
+        # slices that pool. Using a large cap (300) ensures every tier gets enough
+        # companies even if only a few per tier are scored.
         seen_co, deduped = set(), []
         for r in rows:
             if r["company"] in seen_co:
                 continue
             seen_co.add(r["company"]); deduped.append(r)
-            if len(deduped) >= int(limit):
+            if len(deduped) >= 300:
                 break
         rows = deduped
     if tier:

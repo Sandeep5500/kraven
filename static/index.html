@@ -419,7 +419,7 @@ function filterParams() {
 // Populate one tier panel with diversified picks (one per company, ranked by fit).
 async function renderTierPanel(listId, countId, tier) {
   const p = filterParams();
-  p.set("tab","new"); p.set("diversify","true"); p.set("tier", tier); p.set("limit","7");
+  p.set("tab","new"); p.set("diversify","true"); p.set("tier", tier); p.set("limit","8");
   const data = await (await fetch("/api/roles?"+p)).json();
   const list = $("#"+listId); list.innerHTML = "";
   $("#"+countId).textContent = data.roles.length ? data.roles.length+" picks" : "none";
