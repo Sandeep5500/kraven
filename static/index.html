@@ -63,7 +63,7 @@
   .statsel.s-new { color:var(--mut); }
   .statsel.s-applied-noref { color:#58a6ff; border-color:#1f3a5f; background:#0f1c2e; }
   .statsel.s-applied-ref { color:#3fb950; border-color:#1f3f2a; background:#0f1f15; }
-  .cosel { color:var(--orange); border-style:dashed; }
+  .cosel { color:var(--orange); border-style:dashed; max-width:100%; font-size:10px; padding:2px 5px; }
   .age { font-size:11px; font-weight:700; margin-top:3px; }
   .wrap { padding:0 12px; }
   table { width:100%; border-collapse:collapse; table-layout:fixed; }
@@ -85,22 +85,34 @@
   td.actions a { display:inline-block; }
   .kit { color:var(--orange); text-decoration:none; cursor:pointer; }
   .kit:hover { color:#ffa46a; }
-  #suggested { padding:14px 20px 4px; }
-  .sg-head { font-size:13px; font-weight:700; color:var(--orange); margin-bottom:9px; }
-  .sg-sub { font-weight:400; color:var(--mut); }
-  .sg-strip { display:flex; gap:10px; overflow-x:auto; padding-bottom:8px; scrollbar-width:thin; }
-  .sg-card { flex:0 0 210px; background:var(--panel); border:1px solid var(--line); border-radius:10px;
-             padding:10px 12px; display:flex; flex-direction:column; gap:5px; }
-  .sg-card:hover { border-color:var(--orange-dim); }
-  .sg-co { font-size:11px; color:var(--mut); text-transform:uppercase; letter-spacing:.04em; display:flex; justify-content:space-between; }
-  .sg-role { font-size:13px; font-weight:600; line-height:1.3; }
-  .sg-role a { color:var(--txt); text-decoration:none; }
-  .sg-role a:hover { color:var(--orange); }
-  .sg-meta { font-size:11px; color:var(--mut); margin-top:1px; }
-  .sg-act { display:flex; gap:8px; margin-top:5px; }
-  .sg-act a { font-size:11px; cursor:pointer; text-decoration:none; }
-  .sg-act .apply { color:var(--acc); }
+  /* ── Suggested picks: 3-column tier panels ── */
+  #suggested { padding:14px 20px 6px; display:none; }
+  .sg-main-head { font-size:13px; font-weight:700; color:var(--orange); margin-bottom:10px; }
+  .sg-main-sub { font-weight:400; color:var(--mut); }
+  .sg-cols { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+  .sg-panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+  .sg-panel-head { padding:9px 13px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; }
+  .sg-panel-title { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--mut); }
+  .sg-panel-title.tier-big { color:#58a6ff; }
+  .sg-panel-title.tier-mid { color:var(--orange); }
+  .sg-panel-title.tier-yc  { color:#3fb950; }
+  .sg-panel-count { font-size:11px; color:var(--mut); }
+  .sg-list { list-style:none; margin:0; padding:0; }
+  .sg-item { padding:9px 13px; border-bottom:1px solid var(--line); display:flex; flex-direction:column; gap:3px; }
+  .sg-item:last-child { border-bottom:none; }
+  .sg-item:hover { background:#12151c; }
+  .sg-item-top { display:flex; justify-content:space-between; align-items:flex-start; gap:6px; }
+  .sg-item-role { font-size:13px; font-weight:600; line-height:1.3; }
+  .sg-item-role a { color:var(--txt); text-decoration:none; }
+  .sg-item-role a:hover { color:var(--orange); }
+  .sg-item-fit { font-size:11px; font-weight:700; white-space:nowrap; }
+  .sg-item-co { font-size:11px; color:var(--mut); }
+  .sg-item-meta { font-size:11px; color:var(--mut); }
+  .sg-item-act { display:flex; gap:10px; margin-top:2px; }
+  .sg-item-act a { font-size:11px; cursor:pointer; text-decoration:none; }
+  .sg-item-act .apply { color:var(--acc); }
   .appl { color:var(--mut); font-size:11px; display:flex; gap:4px; align-items:center; cursor:pointer; }
+  .sg-head { display:none; }
   button:hover { border-color:var(--orange); }
   /* apply-kit modal */
   .overlay { position:fixed; inset:0; background:rgba(0,0,0,0.6); display:none; z-index:50;
@@ -218,9 +230,22 @@
   <button data-bulk="new">↩ New</button>
   <button id="bulkclear">Clear selection</button>
 </div>
-<div id="suggested" style="display:none">
-  <div class="sg-head">✦ Suggested for you <span class="sg-sub">— top picks, one per company so no single employer crowds the list</span></div>
-  <div class="sg-strip" id="sg-strip"></div>
+<div id="suggested">
+  <div class="sg-main-head">✦ Suggested for you <span class="sg-main-sub">— best fit, one per company</span></div>
+  <div class="sg-cols">
+    <div class="sg-panel" id="sg-big">
+      <div class="sg-panel-head"><span class="sg-panel-title tier-big">Big Tech</span><span class="sg-panel-count" id="sg-big-n"></span></div>
+      <ul class="sg-list" id="sg-big-list"></ul>
+    </div>
+    <div class="sg-panel" id="sg-mid">
+      <div class="sg-panel-head"><span class="sg-panel-title tier-mid">Mid-size</span><span class="sg-panel-count" id="sg-mid-n"></span></div>
+      <ul class="sg-list" id="sg-mid-list"></ul>
+    </div>
+    <div class="sg-panel" id="sg-yc">
+      <div class="sg-panel-head"><span class="sg-panel-title tier-yc">Startups</span><span class="sg-panel-count" id="sg-yc-n"></span></div>
+      <ul class="sg-list" id="sg-yc-list"></ul>
+    </div>
+  </div>
 </div>
 <div class="wrap">
   <table>
@@ -391,29 +416,38 @@ function filterParams() {
   return p;
 }
 
-// Diverse "Suggested" strip: best-fit role per company, so no single employer
-// crowds the top. Only on the New tab (a fresh-applications shortlist).
-async function renderSuggested() {
-  const box = $("#suggested");
-  if (currentTab !== "new") { box.style.display = "none"; return; }
+// Populate one tier panel with diversified picks (one per company, ranked by fit).
+async function renderTierPanel(listId, countId, tier) {
   const p = filterParams();
-  p.set("tab","new"); p.set("diversify","true"); p.set("limit","20");
+  p.set("tab","new"); p.set("diversify","true"); p.set("tier", tier); p.set("limit","7");
   const data = await (await fetch("/api/roles?"+p)).json();
-  if (!data.roles.length) { box.style.display = "none"; return; }
-  const strip = $("#sg-strip"); strip.innerHTML = "";
+  const list = $("#"+listId); list.innerHTML = "";
+  $("#"+countId).textContent = data.roles.length ? data.roles.length+" picks" : "none";
   for (const r of data.roles) {
     const fit = r.relevance==null ? "" :
-      `<span class="fit" style="color:${r.relevance>=70?'#3fb950':r.relevance>=40?'#d29922':'#9aa3b2'}">${r.relevance} fit</span>`;
-    const c = document.createElement("div"); c.className = "sg-card";
-    c.innerHTML = `
-      <div class="sg-co"><span>${esc(r.company)}</span>${fit}</div>
-      <div class="sg-role"><a href="${esc(r.url)}" target="_blank">${esc(r.role_title)}</a></div>
-      <div class="sg-meta">${fmtComp(r)} · ${r.yoe_min==null?"YOE n/a":r.yoe_min+" yrs"}${r.location?" · "+esc(r.location):""}</div>
-      <div class="sg-act"><a class="apply" href="${esc(r.url)}" target="_blank">Apply ↗</a>
+      `<span class="sg-item-fit" style="color:${r.relevance>=70?'#3fb950':r.relevance>=40?'#d29922':'#9aa3b2'}">${r.relevance}</span>`;
+    const meta = [fmtComp(r), r.yoe_min!=null ? r.yoe_min+"yr" : null].filter(Boolean).join(" · ");
+    const li = document.createElement("li"); li.className = "sg-item";
+    li.innerHTML = `
+      <div class="sg-item-top">
+        <div class="sg-item-role"><a href="${esc(r.url)}" target="_blank">${esc(r.role_title)}</a></div>
+        ${fit}
+      </div>
+      <div class="sg-item-co">${esc(r.company)}${meta ? " · "+meta : ""}</div>
+      <div class="sg-item-act"><a class="apply" href="${esc(r.url)}" target="_blank">Apply ↗</a>
         <a class="kit" data-key="${esc(r.key)}">✍️ Kit</a></div>`;
-    strip.append(c);
+    list.append(li);
   }
+}
+
+// Render all 3 tier panels. Only visible on New tab.
+function renderSuggested() {
+  const box = $("#suggested");
+  if (currentTab !== "new") { box.style.display = "none"; return; }
   box.style.display = "block";
+  renderTierPanel("sg-big-list","sg-big-n","Big Tech");
+  renderTierPanel("sg-mid-list","sg-mid-n","Mid-size");
+  renderTierPanel("sg-yc-list","sg-yc-n","Startups");
 }
 
 document.querySelectorAll("th[data-sort]").forEach(th=>th.onclick=()=>{
@@ -489,7 +523,7 @@ $("#kregen").onclick=()=>genKit(true);
 $("#overlay").onclick=(e)=>{ if(e.target.id==="overlay") closeKit(); };
 document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeKit(); });
 $("#rows").addEventListener("click",e=>{ const a=e.target.closest(".kit"); if(a){ e.preventDefault(); openKit(a.dataset.key); } });
-$("#sg-strip").addEventListener("click",e=>{ const a=e.target.closest(".kit"); if(a){ e.preventDefault(); openKit(a.dataset.key); } });
+$("#suggested").addEventListener("click",e=>{ const a=e.target.closest(".kit"); if(a){ e.preventDefault(); openKit(a.dataset.key); } });
 $("#rows").addEventListener("change", async e=>{
   const s=e.target.closest(".statsel");
   if(s){

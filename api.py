@@ -79,6 +79,7 @@ def api_roles(
     limit: int = Query(200, le=1000),
     offset: int = 0,
     diversify: bool = False,
+    tier: str | None = None,
 ):
     rows = db.query_roles(
         username=user,
@@ -88,7 +89,7 @@ def api_roles(
         exclude_companies=[c for c in (exclude_companies or "").split(",") if c],
         tab=tab, posted_within=posted_within,
         search=search, sort=sort, order=order, limit=limit, offset=offset,
-        diversify=diversify,
+        diversify=diversify, tier=tier,
     )
     return {"count": len(rows), "roles": rows}
 

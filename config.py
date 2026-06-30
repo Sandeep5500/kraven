@@ -316,6 +316,39 @@ CATEGORY_SLUGS: dict[str, str] = {
     "Big tech & established AI": "bigtech",
 }
 
+# --- Company tiers -----------------------------------------------------------
+# The UI groups companies into three tiers (Big Tech / Mid-size / Startups)
+# instead of the many fine-grained categories above. Derived from the watchlist
+# Category plus a name-based catch for the big-tech AI arms (e.g. "Amazon AGI",
+# "Apple AIML") that live under the Frontier category but are really big tech.
+TIER_BIG_TECH = "Big Tech"
+TIER_MID = "Mid-size"
+TIER_STARTUP = "Startups"
+_BIG_TECH_CATEGORY = "Big tech & established AI"
+_STARTUP_CATEGORY = "Startups (YC)"
+# Substrings (lowercased) that force a company into the Big Tech tier regardless
+# of its category — catches FAANG-scale parents and their AI labs/subsidiaries.
+BIG_TECH_NAME_TERMS = [
+    "apple", "amazon", "google", "deepmind", "microsoft", "meta", "nvidia",
+    "adobe", "salesforce", "servicenow", "uber", "netflix", "ibm", "qualcomm",
+    "bytedance", "tiktok", "linkedin", "pinterest", "spotify", "snowflake",
+    "databricks", "oracle", "intel",
+]
+
+
+def company_tier(company: str, category: str | None) -> str:
+    """Map a company to one of the three UI tiers."""
+    cat = (category or "").strip()
+    if cat == _STARTUP_CATEGORY:
+        return TIER_STARTUP
+    cl = (company or "").lower()
+    if cat == _BIG_TECH_CATEGORY or any(t in cl for t in BIG_TECH_NAME_TERMS):
+        return TIER_BIG_TECH
+    return TIER_MID
+
+
+TIERS = [TIER_BIG_TECH, TIER_MID, TIER_STARTUP]
+
 # State files for threaded mode (gitignored under state/).
 CHANNELS_STORE = STATE_DIR / "channels.json"   # {category: channel_id}
 THREADS_STORE = STATE_DIR / "threads.json"     # {company: {channel, ts}}

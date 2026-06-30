@@ -95,7 +95,7 @@ CREATE INDEX IF NOT EXISTS idx_uscores_user ON user_scores(username);
 CREATE TABLE IF NOT EXISTS user_status (
     username   TEXT,
     role_key   TEXT,
-    status     TEXT,            -- waiting | applied
+    status     TEXT,            -- applied-noref | applied-ref
     updated_at TEXT,            -- when moved to this status (for age coloring)
     PRIMARY KEY (username, role_key)
 );
@@ -399,7 +399,7 @@ def query_roles(*, username=None, status="active", company=None, category=None,
                 max_yoe=None, yoe_known=False, hide_phd=False, has_comp=False,
                 exclude_companies=None, tab="new", posted_within=None, search=None,
                 sort="first_seen", order="desc", limit=200, offset=0,
-                diversify=False) -> list[dict]:
+                diversify=False, tier=None) -> list[dict]:
     init_db()
     where = ["r.status = ?"]
     params: list = [username, username, status]   # 2 JOINs (scores, applied) then status
@@ -451,6 +451,9 @@ def query_roles(*, username=None, status="active", company=None, category=None,
         # "Suggested" set: rank by fit, then keep the best-fit role per company so a
         # single company's batch can't dominate. Fetch wide, dedupe in Python below.
         sort_col, order = "s.relevance", "DESC"
+    # Tier filtering (Big Tech / Mid-size / Startups) is derived in Python from
+    # company+category, so fetch wide and slice after filtering.
+    if diversify or tier:
         sql_limit, sql_offset = 3000, 0
     else:
         sql_limit, sql_offset = int(limit), int(offset)
@@ -466,13 +469,17 @@ def query_roles(*, username=None, status="active", company=None, category=None,
         rows = [dict(r) for r in conn.execute(q, params).fetchall()]
     if diversify:
         seen_co, deduped = set(), []
-        for r in rows:                    # rows already ranked by fit desc
+        for r in rows:
             if r["company"] in seen_co:
                 continue
             seen_co.add(r["company"]); deduped.append(r)
             if len(deduped) >= int(limit):
                 break
         rows = deduped
+    if tier:
+        rows = [r for r in rows
+                if config.company_tier(r["company"], r.get("company_category")) == tier]
+        rows = rows[int(offset): int(offset) + int(limit)]
     for r in rows:
         r["relevance"] = r.pop("u_rel", None)             # per-user score
         r["relevance_reason"] = r.pop("u_reason", None)
