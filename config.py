@@ -118,13 +118,18 @@ INCLUDE_TITLE_TERMS = [          # CORE: the role itself is AI/ML/research
 ]
 
 # Generic SWE terms — included ONLY when paired with an AIML_QUALIFIER below.
-SWE_TERMS = ["software engineer", "swe", "software developer"]
+# Bare "engineer" is intentionally included: it still requires an AI qualifier,
+# so "Security Engineer" / "Data Engineer" stay out while "Forward Deployed
+# Engineer, Agentic Platform" or "Engineer, LLM Infra" are correctly included.
+SWE_TERMS = ["software engineer", "swe", "software developer", "engineer"]
 
 # AI/ML signal used to qualify a generic SWE title.
 AIML_QUALIFIERS = [
     "ai", "ml", "machine learning", "deep learning", "llm", "nlp",
     "computer vision", "generative ai", "genai", "reinforcement learning",
     "foundation model", "neural", "mlops",
+    "agentic", "agent",   # agentic-platform / AI-agent roles
+    "inference",          # inference engineer / infra
 ]
 
 EXCLUDE_TITLE_TERMS = [
