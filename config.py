@@ -115,6 +115,8 @@ INCLUDE_TITLE_TERMS = [          # CORE: the role itself is AI/ML/research
     "mlops", "ml ops",
     "perception",                # ML perception (robotics/AV)
     "member of technical staff",
+    "research",                  # bare "Research, Post-Training" / "Research, Pretraining" at AI labs
+    "post-training", "pretraining", "pre-training",
 ]
 
 # Generic SWE terms — included ONLY when paired with an AIML_QUALIFIER below.
@@ -143,6 +145,8 @@ EXCLUDE_TITLE_TERMS = [
     "solutions consultant", "consultant", "evangelist", "developer advocate",
     "product manager", "program manager", "designer", "customer success",
     "go to market", "business development", "partnerships",
+    # Non-technical research roles (kept separate from ML/AI research).
+    "user research", "ux research", "research operations", "market research",
 ]
 
 # Set INCLUDE_INTERNS = True to also surface intern / new-grad / return-offer roles.
