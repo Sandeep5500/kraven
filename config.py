@@ -134,6 +134,25 @@ AIML_QUALIFIERS = [
     "inference",          # inference engineer / infra
 ]
 
+# Companies where ALL non-excluded engineering roles are included regardless of
+# AI qualifier in the title — because the entire product/stack is AI-focused.
+# "Software Engineer" at Cognition or Anthropic is always an AI role; the same
+# title at Amazon/Adobe could be mobile, payments, infra, etc.
+ALL_SWE_COMPANIES = {
+    "cognition", "cognition (devin)",
+    "anthropic",
+    "openai",
+    "xai",
+    "deepmind", "google deepmind",
+    "safe superintelligence", "safe superintelligence (ssi)",
+    "reflection ai",
+    "magic.dev",
+    "poolside",
+    "thinking machines lab",
+    "sakana ai",
+    "world labs",
+}
+
 EXCLUDE_TITLE_TERMS = [
     "manager", "director", "vp", "vice president",
     "recruiter", "sales", "marketing",

@@ -206,7 +206,7 @@ def _has_term(terms: list[str], normalized: str) -> bool:
     return False
 
 
-def title_matches(title: str) -> bool:
+def title_matches(title: str, company: str = "") -> bool:
     """True if the title passes the ML/SWE include/exclude filter."""
     if not (title or "").strip():
         return False
@@ -229,6 +229,11 @@ def title_matches(title: str) -> bool:
         return True
     # ...or a generic SWE title qualified by an AI/ML signal.
     if _has_term(config.SWE_TERMS, t) and _has_term(config.AIML_QUALIFIERS, t):
+        return True
+    # For pure-AI companies every non-excluded engineering role is relevant —
+    # "Software Engineer" at Cognition/Anthropic/OpenAI is always an AI role.
+    co = (company or "").strip().lower()
+    if co in config.ALL_SWE_COMPANIES and _has_term(config.SWE_TERMS, t):
         return True
     return False
 

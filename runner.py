@@ -100,7 +100,7 @@ def _cap_per_company(records: list[dict]) -> list[dict]:
 
 def _keep(record: dict) -> bool:
     """A role is kept if its title matches and (when US_ONLY) it's a US location."""
-    if not title_matches(record["role_title"]):
+    if not title_matches(record["role_title"], record.get("company", "")):
         return False
     if config.US_ONLY and not is_us_location(record.get("location", ""),
                                              record.get("country", "")):
