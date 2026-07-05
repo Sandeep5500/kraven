@@ -63,6 +63,8 @@
   .statsel.s-new { color:var(--mut); }
   .statsel.s-applied-noref { color:#58a6ff; border-color:#1f3a5f; background:#0f1c2e; }
   .statsel.s-applied-ref { color:#3fb950; border-color:#1f3f2a; background:#0f1f15; }
+  .dismiss { color:var(--mut); font-size:12px; cursor:pointer; border:none; background:none; padding:0; line-height:1; }
+  .dismiss:hover { color:#ff7b72; }
   .cosel { color:var(--orange); border-style:dashed; max-width:100%; font-size:10px; padding:2px 5px; }
   .age { font-size:11px; font-weight:700; margin-top:3px; }
   .wrap { padding:0 12px; }
@@ -221,6 +223,7 @@
   <button class="tab active" data-tab="new">📥 New <span class="tcount" id="cnt-new"></span></button>
   <button class="tab" data-tab="applied-noref">📤 Applied · no ref <span class="tcount" id="cnt-applied-noref"></span></button>
   <button class="tab" data-tab="applied-ref">🤝 Applied · referred <span class="tcount" id="cnt-applied-ref"></span></button>
+  <button class="tab" data-tab="archived" style="color:var(--mut)">🗄 Archived <span class="tcount" id="cnt-archived"></span></button>
 </div>
 <div id="bulkbar">
   <span id="bulkn"></span>
@@ -228,6 +231,7 @@
   <button data-bulk="applied-noref">📤 Applied · no ref</button>
   <button data-bulk="applied-ref">🤝 Applied · referred</button>
   <button data-bulk="new">↩ New</button>
+  <button data-bulk="archived" style="color:var(--mut)">🗄 Archive</button>
   <button id="bulkclear">Clear selection</button>
 </div>
 <div id="suggested">
@@ -319,7 +323,8 @@ let currentTab="new";
 async function loadCounts(){ try{ const c=await (await fetch("/api/counts")).json();
   $("#cnt-new").textContent=c.new;
   $("#cnt-applied-noref").textContent=c["applied-noref"];
-  $("#cnt-applied-ref").textContent=c["applied-ref"]; }catch(e){} }
+  $("#cnt-applied-ref").textContent=c["applied-ref"];
+  $("#cnt-archived").textContent=c.archived||""; }catch(e){} }
 function renderExcluded(){
   $("#excl-chips").innerHTML = excluded.map(c=>`<span class="chip">${esc(c)} <b data-x="${esc(c)}">×</b></span>`).join("");
   document.querySelectorAll("#excl-chips b").forEach(b=>b.onclick=()=>{ excluded=excluded.filter(x=>x!==b.dataset.x); renderExcluded(); load(); });
@@ -392,7 +397,11 @@ async function load() {
       <td>${seen}</td>
       <td class="actions"><a class="apply" href="${esc(r.url)}" target="_blank">Apply ↗</a>
           <a class="kit" data-key="${esc(r.key)}" title="Generate outreach + essays">✍️ Kit</a>
-          <select class="statsel s-${r.status||'new'}" data-key="${esc(r.key)}" title="Move to a pipeline stage">${stOpts}</select></td>`;
+          <select class="statsel s-${r.status||'new'}" data-key="${esc(r.key)}" title="Move to a pipeline stage">${stOpts}</select>
+          ${currentTab==="archived"
+            ? `<button class="dismiss" data-key="${esc(r.key)}" data-status="new" title="Move back to New">↩ Unarchive</button>`
+            : `<button class="dismiss" data-key="${esc(r.key)}" data-status="archived" title="Not for me — move to Archive">🗄 Archive</button>`
+          }</td>`;
     tb.append(tr);
   }
   selected.clear(); if($("#selall")) $("#selall").checked=false; refreshBulk();
@@ -522,7 +531,13 @@ $("#kclose").onclick=closeKit;
 $("#kregen").onclick=()=>genKit(true);
 $("#overlay").onclick=(e)=>{ if(e.target.id==="overlay") closeKit(); };
 document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeKit(); });
-$("#rows").addEventListener("click",e=>{ const a=e.target.closest(".kit"); if(a){ e.preventDefault(); openKit(a.dataset.key); } });
+$("#rows").addEventListener("click",async e=>{
+  const a=e.target.closest(".kit"); if(a){ e.preventDefault(); return openKit(a.dataset.key); }
+  const d=e.target.closest(".dismiss"); if(d){
+    await fetch(`/api/role/${encodeURIComponent(d.dataset.key)}/status?status=${d.dataset.status}`,{method:"POST"});
+    return load();
+  }
+});
 $("#suggested").addEventListener("click",e=>{ const a=e.target.closest(".kit"); if(a){ e.preventDefault(); openKit(a.dataset.key); } });
 $("#rows").addEventListener("change", async e=>{
   const s=e.target.closest(".statsel");

@@ -330,9 +330,11 @@ def status_counts(username: str) -> dict:
         rows = dict(conn.execute(
             "SELECT us.status, COUNT(*) FROM user_status us JOIN roles r ON r.key=us.role_key "
             "WHERE us.username=? AND r.status='active' GROUP BY us.status", (username,)).fetchall())
-        noref, ref = rows.get("applied-noref", 0), rows.get("applied-ref", 0)
-        return {"new": active - noref - ref,
-                "applied-noref": noref, "applied-ref": ref}
+        noref = rows.get("applied-noref", 0)
+        ref = rows.get("applied-ref", 0)
+        archived = rows.get("archived", 0)
+        return {"new": active - noref - ref - archived,
+                "applied-noref": noref, "applied-ref": ref, "archived": archived}
 
 
 # --- relevance scoring (per user, resume-dependent) --------------------------
@@ -427,10 +429,10 @@ def query_roles(*, username=None, status="active", company=None, category=None,
     if exclude_companies:
         ph = ",".join("?" * len(exclude_companies))
         where.append(f"company NOT IN ({ph})"); params += list(exclude_companies)
-    if tab in ("applied-noref", "applied-ref"):
+    if tab in ("applied-noref", "applied-ref", "archived"):
         where.append("a.status = ?"); params.append(tab)
-    else:  # "new": not yet in any pipeline status
-        where.append("a.status IS NULL")
+    else:  # "new": not yet moved; exclude archived too
+        where.append("(a.status IS NULL OR a.status NOT IN ('applied-noref','applied-ref','archived'))")
     if posted_within:
         # freshness = posted date, falling back to when Kraven first saw it
         thresh = (date.today() - timedelta(days=int(posted_within))).isoformat()
