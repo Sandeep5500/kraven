@@ -159,6 +159,10 @@ def init_db() -> None:
         for col, typ in _MIGRATIONS.items():
             if col not in existing:
                 conn.execute(f"ALTER TABLE roles ADD COLUMN {col} {typ}")
+        # Per-user job preferences (title terms, saved default filters).
+        user_cols = {r[1] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
+        if user_cols and "preferences" not in user_cols:
+            conn.execute("ALTER TABLE users ADD COLUMN preferences TEXT")
 
 
 def upsert_roles(records: list[dict], *, now: str) -> list[str]:
@@ -264,6 +268,39 @@ def list_users() -> list[str]:
     init_db()
     with connect() as conn:
         return [r[0] for r in conn.execute("SELECT username FROM users ORDER BY username")]
+
+
+def get_preferences(username: str) -> dict:
+    init_db()
+    with connect() as conn:
+        row = conn.execute("SELECT preferences FROM users WHERE username=?", (username,)).fetchone()
+    if not row or not row[0]:
+        return {}
+    try:
+        return json.loads(row[0])
+    except Exception:
+        return {}
+
+
+def save_preferences(username: str, prefs: dict) -> None:
+    init_db()
+    with connect() as conn:
+        conn.execute("UPDATE users SET preferences=? WHERE username=?",
+                     (json.dumps(prefs), username))
+
+
+def get_all_preferences() -> dict[str, dict]:
+    """Return {username: prefs} for every user — used by runner to union filters."""
+    init_db()
+    with connect() as conn:
+        rows = conn.execute("SELECT username, preferences FROM users").fetchall()
+    out = {}
+    for username, raw in rows:
+        try:
+            out[username] = json.loads(raw) if raw else {}
+        except Exception:
+            out[username] = {}
+    return out
 
 
 def delete_user(username: str) -> None:
@@ -453,8 +490,12 @@ def query_roles(*, username=None, status="active", company=None, category=None,
         # Rank by fit; use impact as fallback so unscored roles still surface.
         sort_col = "COALESCE(s.relevance, r.impact * 15, 0)"
         order = "DESC"
-    # Tier/diversify filtering is done in Python — fetch wide, slice after.
-    if diversify or tier:
+    # Per-user title prefs: if user has custom terms we fetch wide and post-filter.
+    user_prefs = get_preferences(username) if username else {}
+    has_user_prefs = bool(user_prefs.get("extra_include") or user_prefs.get("extra_exclude")
+                          or user_prefs.get("extra_qualifiers"))
+    # Tier/diversify/prefs filtering done in Python — fetch wide, slice after.
+    if diversify or tier or has_user_prefs:
         sql_limit, sql_offset = 3000, 0
     else:
         sql_limit, sql_offset = int(limit), int(offset)
@@ -483,6 +524,11 @@ def query_roles(*, username=None, status="active", company=None, category=None,
     if tier:
         rows = [r for r in rows
                 if config.company_tier(r["company"], r.get("company_category")) == tier]
+    if has_user_prefs:
+        from normalize import title_matches_prefs
+        rows = [r for r in rows
+                if title_matches_prefs(r.get("role_title", ""), r.get("company", ""), user_prefs)]
+    if tier or has_user_prefs:
         rows = rows[int(offset): int(offset) + int(limit)]
     for r in rows:
         r["relevance"] = r.pop("u_rel", None)             # per-user score

@@ -94,6 +94,30 @@ def api_roles(
     return {"count": len(rows), "roles": rows}
 
 
+class PrefsPayload(BaseModel):
+    extra_include: list[str] = []
+    extra_exclude: list[str] = []
+    extra_qualifiers: list[str] = []
+    saved_filters: dict = {}
+
+
+@app.get("/api/preferences")
+def get_prefs(user: str = Depends(_auth)):
+    return db.get_preferences(user)
+
+
+@app.post("/api/preferences")
+def save_prefs(payload: PrefsPayload, user: str = Depends(_auth)):
+    prefs = {
+        "extra_include":   [t.strip().lower() for t in payload.extra_include   if t.strip()],
+        "extra_exclude":   [t.strip().lower() for t in payload.extra_exclude   if t.strip()],
+        "extra_qualifiers":[t.strip().lower() for t in payload.extra_qualifiers if t.strip()],
+        "saved_filters":   payload.saved_filters,
+    }
+    db.save_preferences(user, prefs)
+    return {"ok": True}
+
+
 def _now():
     return datetime.now(timezone.utc).isoformat()
 

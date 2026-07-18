@@ -116,6 +116,24 @@
   .appl { color:var(--mut); font-size:11px; display:flex; gap:4px; align-items:center; cursor:pointer; }
   .sg-head { display:none; }
   button:hover { border-color:var(--orange); }
+  /* preferences modal */
+  .pref-modal { max-width:560px; }
+  .pref-section { margin:14px 0; }
+  .pref-section h4 { font-size:12px; font-weight:700; color:var(--mut); text-transform:uppercase;
+                     letter-spacing:.06em; margin:0 0 8px; }
+  .pref-section p  { font-size:12px; color:var(--mut); margin:0 0 8px; }
+  .term-chips { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; }
+  .term-chip { font-size:12px; background:#1d2230; border:1px solid var(--line); border-radius:12px;
+               padding:2px 10px; display:flex; align-items:center; gap:6px; }
+  .term-chip b { cursor:pointer; color:var(--mut); font-weight:700; }
+  .term-chip b:hover { color:#ff7b72; }
+  .term-add { display:flex; gap:6px; }
+  .term-add input { flex:1; font-size:12px; padding:4px 8px; background:var(--bg);
+                    border:1px solid var(--line); border-radius:6px; color:var(--txt); }
+  .term-add input:focus { outline:none; border-color:var(--orange); }
+  .term-add button { font-size:12px; padding:4px 10px; }
+  .co-link { cursor:pointer; color:var(--acc); text-decoration:none; }
+  .co-link:hover { color:var(--orange); text-decoration:underline; }
   /* apply-kit modal */
   .overlay { position:fixed; inset:0; background:rgba(0,0,0,0.6); display:none; z-index:50;
              padding:40px 16px; overflow-y:auto; }
@@ -162,6 +180,7 @@
   <span class="stats" id="updated" title="When the role data was last refreshed"></span>
   <span style="margin-left:auto; display:flex; gap:10px; align-items:center;">
     <span class="stats" id="whoami"></span>
+    <button id="prefs-btn" title="Job preferences — title keywords, saved filters">⚙ Preferences</button>
     <input type="file" id="resume-file" accept=".pdf,.txt" style="display:none"/>
     <button id="resume-btn">📄 Upload resume</button>
     <span class="stats" id="resume-status"></span>
@@ -278,6 +297,50 @@
   <div id="empty" style="display:none">No roles match these filters.</div>
 </div>
 
+<div class="overlay" id="prefs-overlay">
+  <div class="modal pref-modal">
+    <div class="head">
+      <div class="t">⚙ Job Preferences</div>
+      <button id="prefs-close">✕ Close</button>
+    </div>
+    <div class="body">
+      <div class="pref-section">
+        <h4>Extra title keywords to include</h4>
+        <p>Roles matching these terms will be ingested for you, on top of the global AI/ML filter. Example: <em>quantitative researcher, quant developer, systematic</em></p>
+        <div class="term-chips" id="inc-chips"></div>
+        <div class="term-add">
+          <input id="inc-input" placeholder="Add keyword…"/>
+          <button id="inc-add">+ Add</button>
+        </div>
+      </div>
+      <div class="pref-section">
+        <h4>Extra title keywords to exclude</h4>
+        <p>Roles matching these terms will be hidden from your feed.</p>
+        <div class="term-chips" id="exc-chips"></div>
+        <div class="term-add">
+          <input id="exc-input" placeholder="Add keyword…"/>
+          <button id="exc-add">+ Add</button>
+        </div>
+      </div>
+      <div class="pref-section">
+        <h4>Extra SWE qualifiers</h4>
+        <p>Generic "Engineer" / "Software Engineer" titles are included only when paired with an AI/ML qualifier. Add domain qualifiers here, e.g. <em>finance, trading, quant</em></p>
+        <div class="term-chips" id="qual-chips"></div>
+        <div class="term-add">
+          <input id="qual-input" placeholder="Add qualifier…"/>
+          <button id="qual-add">+ Add</button>
+        </div>
+      </div>
+      <div class="pref-section" style="border-top:1px solid var(--line); padding-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
+        <button id="prefs-save-defaults" title="Save current filter panel state as your defaults">💾 Save current filters as my defaults</button>
+        <button id="prefs-load-defaults" title="Restore your saved default filters">↩ Load my defaults</button>
+        <button id="prefs-save" style="margin-left:auto; border-color:var(--orange); color:var(--orange)">✓ Save preferences</button>
+      </div>
+      <p id="prefs-status" style="font-size:12px; color:var(--mut); margin-top:10px;"></p>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="overlay">
   <div class="modal">
     <div class="head">
@@ -380,7 +443,7 @@ async function load() {
       <td><input type="checkbox" class="selbox" data-key="${esc(r.key)}"></td>
       <td class="title"><a href="${esc(r.url)}" target="_blank">${esc(r.role_title)}</a>${phd}
           ${r.overview?`<div class="ov">${esc(r.overview)}</div>`:""}</td>
-      <td class="co">${esc(r.company)}
+      <td class="co"><a class="co-link" data-co="${esc(r.company)}" title="Filter to ${esc(r.company)} only">${esc(r.company)}</a>
           <select class="cosel" data-co="${esc(r.company)}" title="Move ALL ${esc(r.company)} roles at once">
             <option value="">↦ all ${esc(r.company)}…</option>
             <option value="applied-noref">📤 Applied · no ref</option>
@@ -595,7 +658,123 @@ document.querySelectorAll("#bulkbar [data-bulk]").forEach(btn=>btn.onclick=async
   load();   // re-render: moved rows leave the tab; selection resets
 });
 
-loadFacets().then(load);
+// --- company click → filter ---
+$("#rows").addEventListener("click", e => {
+  const a = e.target.closest(".co-link");
+  if (!a) return;
+  e.preventDefault();
+  const co = a.dataset.co;
+  const inp = $("#company");
+  if (inp.value === co) { inp.value = ""; }   // second click clears filter
+  else { inp.value = co; }
+  load();
+});
+
+// --- preferences modal ---
+let userPrefs = {extra_include:[], extra_exclude:[], extra_qualifiers:[], saved_filters:{}};
+
+function renderChips(containerId, arr, key) {
+  const box = $("#"+containerId); box.innerHTML = "";
+  arr.forEach((term,i) => {
+    const c = document.createElement("span"); c.className = "term-chip";
+    c.innerHTML = `${esc(term)} <b data-i="${i}" data-key="${key}" title="Remove">✕</b>`;
+    box.append(c);
+  });
+}
+
+function renderAllChips() {
+  renderChips("inc-chips",  userPrefs.extra_include,    "extra_include");
+  renderChips("exc-chips",  userPrefs.extra_exclude,    "extra_exclude");
+  renderChips("qual-chips", userPrefs.extra_qualifiers, "extra_qualifiers");
+}
+
+document.querySelectorAll(".term-chips").forEach(box => box.addEventListener("click", e => {
+  const b = e.target.closest("b[data-i]"); if (!b) return;
+  const key = b.dataset.key, i = parseInt(b.dataset.i);
+  userPrefs[key].splice(i, 1);
+  renderAllChips();
+}));
+
+function addTerm(inputId, key) {
+  const inp = $("#"+inputId), v = inp.value.trim().toLowerCase();
+  if (!v || userPrefs[key].includes(v)) { inp.value=""; return; }
+  userPrefs[key].push(v); inp.value = ""; renderAllChips();
+}
+$("#inc-add").onclick  = () => addTerm("inc-input",  "extra_include");
+$("#exc-add").onclick  = () => addTerm("exc-input",  "extra_exclude");
+$("#qual-add").onclick = () => addTerm("qual-input", "extra_qualifiers");
+["inc-input","exc-input","qual-input"].forEach((id,idx) => {
+  $("#"+id).addEventListener("keydown", e => {
+    if (e.key==="Enter") { e.preventDefault(); ["inc-add","exc-add","qual-add"][idx] && $("#"+["inc-add","exc-add","qual-add"][idx]).click(); }
+  });
+});
+
+async function openPrefs() {
+  const r = await fetch("/api/preferences"); userPrefs = await r.json();
+  if (!userPrefs.extra_include)    userPrefs.extra_include    = [];
+  if (!userPrefs.extra_exclude)    userPrefs.extra_exclude    = [];
+  if (!userPrefs.extra_qualifiers) userPrefs.extra_qualifiers = [];
+  if (!userPrefs.saved_filters)    userPrefs.saved_filters    = {};
+  renderAllChips();
+  $("#prefs-status").textContent = "";
+  $("#prefs-overlay").classList.add("open");
+}
+
+async function savePrefs() {
+  const r = await fetch("/api/preferences", {method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({
+      extra_include:    userPrefs.extra_include,
+      extra_exclude:    userPrefs.extra_exclude,
+      extra_qualifiers: userPrefs.extra_qualifiers,
+      saved_filters:    userPrefs.saved_filters,
+    })});
+  const d = await r.json();
+  $("#prefs-status").textContent = d.ok
+    ? "✓ Saved. New title terms take effect on the next ingest run."
+    : "Save failed.";
+}
+
+// Save current filter panel state as defaults
+$("#prefs-save-defaults").onclick = () => {
+  const sf = {};
+  for (const id of ["search","company","category","seniority","min_impact","min_relevance","max_yoe","posted_within"])
+    sf[id] = $("#"+id).value;
+  sf.has_comp  = $("#has_comp").checked;
+  sf.yoe_known = $("#yoe_known").checked;
+  sf.hide_phd  = $("#hide_phd").checked;
+  sf.sort = sort; sf.order = order;
+  sf.exclude_companies = [...excluded];
+  userPrefs.saved_filters = sf;
+  $("#prefs-status").textContent = "Defaults captured — hit Save preferences to persist.";
+};
+
+// Load saved defaults into the filter panel
+function applyDefaultFilters(sf) {
+  if (!sf || !Object.keys(sf).length) return;
+  for (const id of ["search","company","category","seniority","min_impact","min_relevance","max_yoe","posted_within"])
+    if (sf[id] !== undefined) $("#"+id).value = sf[id];
+  if (sf.has_comp  !== undefined) $("#has_comp").checked  = sf.has_comp;
+  if (sf.yoe_known !== undefined) $("#yoe_known").checked = sf.yoe_known;
+  if (sf.hide_phd  !== undefined) $("#hide_phd").checked  = sf.hide_phd;
+  if (sf.sort)  { sort = sf.sort; order = sf.order || "desc"; }
+  if (sf.exclude_companies) { excluded = [...sf.exclude_companies]; renderExcluded(); }
+}
+
+$("#prefs-load-defaults").onclick = () => { applyDefaultFilters(userPrefs.saved_filters); load(); };
+$("#prefs-save").onclick = savePrefs;
+$("#prefs-btn").onclick  = openPrefs;
+$("#prefs-close").onclick = () => $("#prefs-overlay").classList.remove("open");
+$("#prefs-overlay").onclick = e => { if (e.target.id==="prefs-overlay") $("#prefs-overlay").classList.remove("open"); };
+
+// Auto-apply saved defaults on first load
+async function loadDefaultsOnce() {
+  const r = await fetch("/api/preferences");
+  const p = await r.json();
+  if (p && p.saved_filters) applyDefaultFilters(p.saved_filters);
+}
+
+loadFacets().then(() => loadDefaultsOnce().then(load));
 </script>
 </body>
 </html>

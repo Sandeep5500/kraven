@@ -98,9 +98,28 @@ def _cap_per_company(records: list[dict]) -> list[dict]:
     return out
 
 
+def _build_union_extras() -> tuple[list[str], list[str], list[str]]:
+    """Union of every user's extra title terms — so a role any user wants gets stored."""
+    inc, exc, qual = set(), set(), set()
+    for prefs in db.get_all_preferences().values():
+        inc.update(prefs.get("extra_include", []))
+        exc.update(prefs.get("extra_exclude", []))
+        qual.update(prefs.get("extra_qualifiers", []))
+    return list(inc), list(exc), list(qual)
+
+
+# Built once per run so we don't query the DB per-record.
+_UNION_EXTRAS: tuple[list, list, list] | None = None
+
+
 def _keep(record: dict) -> bool:
-    """A role is kept if its title matches and (when US_ONLY) it's a US location."""
-    if not title_matches(record["role_title"], record.get("company", "")):
+    """A role is kept if it matches ANY user's title filter, is in the US, and isn't stale."""
+    global _UNION_EXTRAS
+    if _UNION_EXTRAS is None:
+        _UNION_EXTRAS = _build_union_extras()
+    extra_inc, extra_exc, extra_qual = _UNION_EXTRAS
+    if not title_matches(record["role_title"], record.get("company", ""),
+                         extra_inc, extra_exc, extra_qual):
         return False
     if config.US_ONLY and not is_us_location(record.get("location", ""),
                                              record.get("country", "")):

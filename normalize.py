@@ -206,8 +206,14 @@ def _has_term(terms: list[str], normalized: str) -> bool:
     return False
 
 
-def title_matches(title: str, company: str = "") -> bool:
-    """True if the title passes the ML/SWE include/exclude filter."""
+def title_matches(title: str, company: str = "",
+                  extra_include: list[str] | None = None,
+                  extra_exclude: list[str] | None = None,
+                  extra_qualifiers: list[str] | None = None) -> bool:
+    """True if the title passes the ML/SWE include/exclude filter.
+
+    extra_* are per-user additions layered on top of the global config terms.
+    """
     if not (title or "").strip():
         return False
     t = _normalize_title(title)
@@ -215,7 +221,8 @@ def title_matches(title: str, company: str = "") -> bool:
     if not config.INCLUDE_INTERNS and _has_term(config.INTERN_TERMS, t):
         return False
 
-    if _has_term(config.EXCLUDE_TITLE_TERMS, t):
+    all_exclude = list(config.EXCLUDE_TITLE_TERMS) + list(extra_exclude or [])
+    if _has_term(all_exclude, t):
         return False
 
     if config.EXCLUDE_SENIOR and _is_senior(t):
@@ -224,18 +231,29 @@ def title_matches(title: str, company: str = "") -> bool:
     if config.NEW_GRAD_ONLY and not _has_term(config.NEW_GRAD_TERMS, t):
         return False
 
-    # Core AI/ML/research role term...
-    if _has_term(config.INCLUDE_TITLE_TERMS, t):
+    # Core AI/ML/research role term (global + user extra)…
+    all_include = list(config.INCLUDE_TITLE_TERMS) + list(extra_include or [])
+    if _has_term(all_include, t):
         return True
-    # ...or a generic SWE title qualified by an AI/ML signal.
-    if _has_term(config.SWE_TERMS, t) and _has_term(config.AIML_QUALIFIERS, t):
+    # …or a generic SWE title qualified by an AI/ML signal.
+    all_qualifiers = list(config.AIML_QUALIFIERS) + list(extra_qualifiers or [])
+    if _has_term(config.SWE_TERMS, t) and _has_term(all_qualifiers, t):
         return True
-    # For pure-AI companies every non-excluded engineering role is relevant —
-    # "Software Engineer" at Cognition/Anthropic/OpenAI is always an AI role.
+    # For pure-AI companies every non-excluded engineering role is relevant.
     co = (company or "").strip().lower()
     if co in config.ALL_SWE_COMPANIES and _has_term(config.SWE_TERMS, t):
         return True
     return False
+
+
+def title_matches_prefs(title: str, company: str, prefs: dict) -> bool:
+    """Query-time per-user filter: global rules + user's own extra terms."""
+    return title_matches(
+        title, company,
+        extra_include=prefs.get("extra_include", []),
+        extra_exclude=prefs.get("extra_exclude", []),
+        extra_qualifiers=prefs.get("extra_qualifiers", []),
+    )
 
 
 _COHORT_YEAR = re.compile(
