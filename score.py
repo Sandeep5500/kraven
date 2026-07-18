@@ -27,6 +27,31 @@ log = logging.getLogger("ai-jobs-runner")
 _SYSTEM = ("You are a precise technical recruiter scoring how well a candidate's "
            "resume fits a specific role. Output ONLY a JSON object.")
 
+# Keywords that identify roles the user deprioritises: core distributed-systems /
+# platform-infra / AI-inference-serving work vs modelling/research/applied-AI work.
+# A deterministic -12 penalty is applied after the LLM score for these roles.
+_DEPRIORITISE_TITLE = [
+    "inference", "platform engineer", "distributed systems",
+    "infrastructure engineer", "reliability engineer", "sre",
+    "systems engineer", "backend engineer", "backend software",
+]
+_DEPRIORITISE_OVERVIEW = [
+    "distributed systems", "inference serving", "inference infrastructure",
+    "model serving", "serving infrastructure", "platform engineering",
+    "reliability engineering", "site reliability",
+]
+_PENALTY = 12   # points subtracted for deprioritised role types
+
+
+def _is_deprioritised(role: dict) -> bool:
+    title = (role.get("role_title") or "").lower()
+    overview = (role.get("overview") or "").lower()
+    if any(k in title for k in _DEPRIORITISE_TITLE):
+        return True
+    if any(k in overview for k in _DEPRIORITISE_OVERVIEW):
+        return True
+    return False
+
 
 def build_messages(role: dict, resume: str) -> list[dict]:
     desc = enrich._strip_html(role.get("description") or "")[:3500]
@@ -34,6 +59,10 @@ def build_messages(role: dict, resume: str) -> list[dict]:
         "Score 0-100 how well this candidate fits THIS role — weigh skills, domain, "
         "seniority/years-of-experience fit, and trajectory. Be discriminating: "
         "80-100 = strong match, 50-79 = plausible stretch, 0-49 = weak/irrelevant.\n"
+        "IMPORTANT: Roles focused primarily on distributed systems, platform/infra "
+        "engineering, or AI inference serving (not ML modelling or applied-AI research) "
+        "should score 10-15 points lower to reflect weaker fit for an ML/AI research "
+        "and applied-AI background.\n"
         'Return JSON: {"relevance": <int 0-100>, "reason": "<<=12 words why>"}\n\n'
         f"ROLE: {role.get('company')} — {role.get('role_title')} ({role.get('location')})\n"
         f"{role.get('overview') or ''}\n{desc}\n\n"
@@ -49,6 +78,8 @@ def _score_one(args) -> bool:
         if not d or d.get("relevance") is None:
             return False
         rel = max(0, min(100, int(d["relevance"])))
+        if _is_deprioritised(role):
+            rel = max(0, rel - _PENALTY)
         db.save_score(username, role["key"], rel, (d.get("reason") or "")[:140])
         return True
     except Exception as exc:  # noqa: BLE001
