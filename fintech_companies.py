@@ -107,6 +107,8 @@ FINTECH_COMPANIES = [
     ("Sardine",               "Fraud + AML ML, device/behavior signals",     ["sardine", "sardine-ai"]),
     ("Featurespace",          "Adaptive-behavioral fraud ML",                ["featurespace"]),
     ("Feedzai",               "Fraud/AML risk ML platform",                  ["feedzai"]),
+    ("Socure",                "Identity-verification fraud ML",              ["socure"]),
+    ("Persona",               "Identity-verification ML",                    ["persona", "withpersona"]),
 ]
 
 
