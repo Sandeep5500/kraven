@@ -88,6 +88,7 @@ ATS_OVERRIDES: dict[str, tuple[str, str]] = {
     "Boston Dynamics": ("workday", "bostondynamics|wd1|Boston_Dynamics"),
     # Big-tech custom public API (token unused; single board).
     "Amazon": ("amazon", "amazon"),
+    "DoorDash": ("greenhouse", "doordashusa"),
 }
 
 # --- Title filtering ---------------------------------------------------------

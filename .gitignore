@@ -1,6 +1,11 @@
 # Secrets
 .env
 
+# Personal files (resumes etc.)
+*.docx
+*.doc
+Deepika_Palagani_Resume*
+
 # State & logs
 state/
 *.log
