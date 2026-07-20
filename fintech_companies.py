@@ -94,6 +94,21 @@ FINTECH_COMPANIES = [
     ("Numerai",               "ML-powered hedge fund, data science",         ["numerai"]),
     ("Orca Security",         "Cloud security ML (fintech infra adjacent)",  ["orca-security", "orcasecurity"]),
     ("Dune Analytics",        "On-chain data + ML",                          ["dune", "dune-analytics"]),
+    # ── Payments processors ────────────────────────────────────────────────
+    ("Checkout.com",          "Payments processor, ML risk",                 ["checkout", "checkoutcom", "checkout-com"]),
+    ("Adyen",                 "Payments processor, ML risk",                 ["adyen"]),
+    ("Braintree",             "PayPal payments, ML fraud",                   ["braintree"]),
+    ("Mastercard",            "Card network, AI/ML fraud + data",            ["mastercard"]),
+    ("Visa",                  "Card network, AI/ML fraud + data",            ["visa"]),
+    ("Wise",                  "Cross-border payments, ML risk",              ["wise", "transferwise"]),
+    ("Revolut",               "Neobank, ML fraud/risk",                      ["revolut"]),
+    # ── Fraud / AML / risk-engineering ML (vertical specialists) ──────────
+    ("Unit21",                "Fraud + AML detection ML platform",           ["unit21"]),
+    ("Sardine",               "Fraud + AML ML, device/behavior signals",     ["sardine", "sardine-ai"]),
+    ("Featurespace",          "Adaptive-behavioral fraud ML",                ["featurespace"]),
+    ("Feedzai",               "Fraud/AML risk ML platform",                  ["feedzai"]),
+    ("Socure",                "Identity-verification fraud ML",              ["socure"]),
+    ("Persona",               "Identity-verification ML",                    ["persona", "withpersona"]),
 ]
 
 
