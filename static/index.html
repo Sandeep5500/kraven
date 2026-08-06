@@ -420,6 +420,7 @@ async function load() {
   if ($("#hide_phd").checked) p.set("hide_phd","true");
   if (excluded.length) p.set("exclude_companies", excluded.join(","));
   p.set("tab", currentTab);
+  if (currentTab === "new") p.set("spacing", "10");
   $("#fcount").textContent = activeCount() || "";
   p.set("sort", sort); p.set("order", order); p.set("limit","1000");
   const data = await (await fetch("/api/roles?"+p)).json();
@@ -506,8 +507,13 @@ async function renderTierPanel(listId, countId, tier) {
         ${fit}
       </div>
       <div class="sg-item-co">${esc(r.company)}${meta ? " · "+meta : ""}</div>
-      <div class="sg-item-act"><a class="apply" href="${esc(r.url)}" target="_blank">Apply ↗</a>
-        <a class="kit" data-key="${esc(r.key)}">✍️ Kit</a></div>`;
+      <div class="sg-item-act">
+        <a class="apply" href="${esc(r.url)}" target="_blank">Apply ↗</a>
+        <a class="kit" data-key="${esc(r.key)}">✍️ Kit</a>
+        <a class="sg-dismiss" data-key="${esc(r.key)}" data-status="applied-noref" title="Mark applied (no referral)">📤</a>
+        <a class="sg-dismiss" data-key="${esc(r.key)}" data-status="applied-ref" title="Mark applied (referred)">🤝</a>
+        <a class="sg-dismiss" data-key="${esc(r.key)}" data-status="archived" title="Archive">🗄</a>
+      </div>`;
     list.append(li);
   }
 }
@@ -601,7 +607,15 @@ $("#rows").addEventListener("click",async e=>{
     return load();
   }
 });
-$("#suggested").addEventListener("click",e=>{ const a=e.target.closest(".kit"); if(a){ e.preventDefault(); openKit(a.dataset.key); } });
+$("#suggested").addEventListener("click",async e=>{
+  const a=e.target.closest(".kit"); if(a){ e.preventDefault(); return openKit(a.dataset.key); }
+  const d=e.target.closest(".sg-dismiss"); if(d){
+    const li=d.closest(".sg-item");
+    await fetch(`/api/role/${encodeURIComponent(d.dataset.key)}/status?status=${d.dataset.status}`,{method:"POST"});
+    li.remove();
+    loadCounts();
+  }
+});
 $("#rows").addEventListener("change", async e=>{
   const s=e.target.closest(".statsel");
   if(s){

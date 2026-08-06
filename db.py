@@ -438,7 +438,7 @@ def query_roles(*, username=None, status="active", company=None, category=None,
                 max_yoe=None, yoe_known=False, hide_phd=False, has_comp=False,
                 exclude_companies=None, tab="new", posted_within=None, search=None,
                 sort="first_seen", order="desc", limit=200, offset=0,
-                diversify=False, tier=None) -> list[dict]:
+                diversify=False, tier=None, spacing=None) -> list[dict]:
     init_db()
     where = ["r.status = ?"]
     params: list = [username, username, status]   # 2 JOINs (scores, applied) then status
@@ -494,8 +494,8 @@ def query_roles(*, username=None, status="active", company=None, category=None,
     user_prefs = get_preferences(username) if username else {}
     has_user_prefs = bool(user_prefs.get("extra_include") or user_prefs.get("extra_exclude")
                           or user_prefs.get("extra_qualifiers"))
-    # Tier/diversify/prefs filtering done in Python — fetch wide, slice after.
-    if diversify or tier or has_user_prefs:
+    # Tier/diversify/spacing/prefs filtering done in Python — fetch wide, slice after.
+    if diversify or tier or has_user_prefs or spacing:
         sql_limit, sql_offset = 3000, 0
     else:
         sql_limit, sql_offset = int(limit), int(offset)
@@ -528,7 +528,18 @@ def query_roles(*, username=None, status="active", company=None, category=None,
         from normalize import title_matches_prefs
         rows = [r for r in rows
                 if title_matches_prefs(r.get("role_title", ""), r.get("company", ""), user_prefs)]
-    if tier or has_user_prefs:
+    if spacing:
+        # Sliding-window cooldown: once a company appears, suppress it for the
+        # next `spacing` output slots. Preserves relevance ordering within the window.
+        n, last_pos, spaced = int(spacing), {}, []
+        for r in rows:
+            co = r["company"].lower()
+            last = last_pos.get(co)
+            if last is None or (len(spaced) - last) >= n:
+                last_pos[co] = len(spaced)
+                spaced.append(r)
+        rows = spaced
+    if tier or has_user_prefs or spacing:
         rows = rows[int(offset): int(offset) + int(limit)]
     for r in rows:
         r["relevance"] = r.pop("u_rel", None)             # per-user score
